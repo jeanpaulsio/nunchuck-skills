@@ -17,7 +17,7 @@ nunchuck-skills/
 │   ├── rails-review.md              # /rails-review
 │   ├── data-review.md               # /data-review - schema + query review
 │   ├── security-review.md           # /security-review - deep security audit
-│   ├── scout.md                    # /scout - codebase assessment
+│   ├── scout.md                     # /scout - codebase assessment
 │   └── audit.md                     # /audit - ship confident cadences
 │
 ├── agents/                          # Agent definitions (the brains)
@@ -30,7 +30,7 @@ nunchuck-skills/
 │   └── security-reviewer.md         # Deep security audit (app code + Claude config)
 │
 ├── skills/                          # Deep reference (the knowledge base)
-│   ├── workflow.md                  # 5 modes: assess, think, design, build, audit
+│   ├── workflow.md                  # The 5 phases
 │   ├── ship-confident.md            # Daily/weekly/monthly audit cadences
 │   ├── python-fastapi-patterns/
 │   │   └── SKILL.md                 # FastAPI + SQLAlchemy + Pydantic patterns
@@ -65,7 +65,7 @@ Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 
 | Phase | How | When |
 |------|-----|------|
-| **Assess** | `/scout` | Starting a new project or joining an existing codebase |
+| **Assess** | `/scout` | First time in a codebase or starting from scratch |
 | **Product Think** | `/plan` | Before writing any code for a new feature |
 | **Design** | `/plan` then `/data-review` | After product decisions, before implementation |
 | **Build** | Code, then `/python-review` `/react-review` `/rails-review` | The actual coding |
@@ -95,11 +95,9 @@ The install script copies files into `.claude/` (local) or `~/.claude/` (global)
 
 Here's how it looks in practice. Uncle Rico wants an app where people can rent his time machine by the hour.
 
-```
-# ──────────────────────────────────────────────
-# STEP 1: /plan — think before you build
-# ──────────────────────────────────────────────
+**1. `/plan` - think before you build**
 
+```
 > /plan
   I want to build a time machine rental app for my uncle's business.
   People book time slots, pay, use the machine, and return it.
@@ -111,7 +109,7 @@ Claude: Walk me through what happens from the moment someone wants
 > Well they'd pick a time slot, pay, show up, use the machine, and
   bring it back. Sometimes they break it.
 
-Claude: When they break it — does Rico charge them for repairs,
+Claude: When they break it - does Rico charge them for repairs,
         or is there a damage deposit upfront?
 
 > Damage deposit. And he wants to block people who've broken it before.
@@ -134,11 +132,11 @@ Claude: Got it. Here's what I'm hearing:
 
 Claude designs the tables, foreign keys, status enums, and
 API endpoints. Presents it for your confirmation.
+```
 
-# ──────────────────────────────────────────────
-# STEP 2: /data-review — check the schema
-# ──────────────────────────────────────────────
+**2. `/data-review` - check the schema**
 
+```
 > /data-review
 
 Claude: [HIGH] Missing index on bookings.customer_id
@@ -147,33 +145,33 @@ Claude: [HIGH] Missing index on bookings.customer_id
         [MEDIUM] Consider a partial unique index on
         time_slots(start_time) WHERE available = true
 
-        Verdict: WARNING — fix the FK index before building.
+        Verdict: WARNING - fix the FK index before building.
 
 > fix it
+```
 
-# ──────────────────────────────────────────────
-# STEP 3: build the feature
-# ──────────────────────────────────────────────
+**3. Build the feature**
 
+```
 > alright, build the booking service. start with tests.
 
 Claude writes the migration, model, service layer, API route,
-and tests. TDD — failing tests first, then implementation.
+and tests. TDD - failing tests first, then implementation.
+```
 
-# ──────────────────────────────────────────────
-# STEP 4: /python-review — before you commit
-# ──────────────────────────────────────────────
+**4. `/python-review` - before you commit**
 
+```
 > /python-review
 
-Claude: [HIGH] booking_service.py:45 — service calls commit()
+Claude: [HIGH] booking_service.py:45 - service calls commit()
         instead of flush(). Breaks transaction atomicity if
         a later operation in the same request fails.
 
         [MEDIUM] Missing error path test for double-booking
         the same time slot.
 
-        Verdict: WARNING — fix the commit() call.
+        Verdict: WARNING - fix the commit() call.
 
 > fix both of those
 
@@ -184,44 +182,44 @@ Claude fixes the flush issue and adds the error path test.
 Claude: No CRITICAL or HIGH issues. Verdict: APPROVE.
 
 > ok commit this and make a PR
+```
 
-# ──────────────────────────────────────────────
-# STEP 5: /audit — after a few weeks of shipping
-# ──────────────────────────────────────────────
+**5. `/audit` - after a few weeks of shipping**
 
+```
 > /audit weekly
 
 Claude: Looked at last 10 PRs. Findings:
 
   This sprint:
-    - Extract date validation (appears in 3 files) — S, high pain
+    - Extract date validation (appears in 3 files) - S, high pain
   Next sprint:
-    - Split booking_service.py (crossed 400 lines) — M, medium pain
+    - Split booking_service.py (crossed 400 lines) - M, medium pain
   Track:
-    - test_booking_creation hasn't failed in 2 months — S, low pain
+    - test_booking_creation hasn't failed in 2 months - S, low pain
 ```
 
 ### The Commands
 
 ```
-/plan           — think before you build
-/python-review  — review Python/FastAPI code
-/react-review   — review React/TypeScript code
-/rails-review   — review Ruby on Rails code
-/data-review      — review schema and queries
-/security-review  — deep security audit before launch
-/scout           — analyze a new codebase
-/audit            — codebase health check (daily/weekly/monthly)
+/plan              think before you build
+/python-review     review Python/FastAPI code
+/react-review      review React/TypeScript code
+/rails-review      review Ruby on Rails code
+/data-review       review schema and queries
+/security-review   deep security audit before launch
+/scout             scout a new or unfamiliar codebase
+/audit             codebase health check (daily/weekly/monthly)
 ```
 
 ## Stack Support
 
 All three stacks included. Whatever you want, gosh.
 
-- **Python / FastAPI / SQLAlchemy** -- patterns, reviewer agent, checklist
-- **TypeScript / React / Vike** -- patterns, reviewer agent, checklist
-- **Ruby on Rails 8** -- patterns, reviewer agent, checklist
-- **PostgreSQL** -- database patterns and reviewer (cross-stack)
+- **Python / FastAPI / SQLAlchemy** - patterns, reviewer agent, checklist
+- **TypeScript / React / Vike** - patterns, reviewer agent, checklist
+- **Ruby on Rails 8** - patterns, reviewer agent, checklist
+- **PostgreSQL** - database patterns and reviewer (cross-stack)
 
 ## Philosophy
 
