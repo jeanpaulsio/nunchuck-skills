@@ -61,17 +61,17 @@ Three layers. Like a layered quesadilla but for code review.
 
 Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 
-## The 5 Modes
+## The 5 Phases
 
-| Mode | What it does | When to use |
-|------|-------------|-------------|
-| **Assess** | Understand the codebase or pick a stack | Starting any project |
-| **Product Think** | Extract nouns, relationships, states from conversation | Before writing any code |
-| **Design** | Schema, API contracts, service boundaries | After product decisions are made |
-| **Build** | TDD loop with review | The actual coding |
-| **Audit** | Daily/weekly/monthly hygiene | Ongoing maintenance |
+| Phase | How | When |
+|------|-----|------|
+| **Assess** | `/assess` | Starting a new project or joining an existing codebase |
+| **Product Think** | `/plan` | Before writing any code for a new feature |
+| **Design** | `/plan` then `/data-review` | After product decisions, before implementation |
+| **Build** | Code, then `/python-review` `/react-review` `/rails-review` | The actual coding |
+| **Audit** | `/audit daily\|weekly\|monthly` | Ongoing codebase health |
 
-Most playbooks start at Build. That's why most code built on vibes breaks.
+Most vibe coders live in Build and wonder why everything breaks. It's like Rex Kwon Do without the training. You think you're tough? Forget about it.
 
 ## Install
 
