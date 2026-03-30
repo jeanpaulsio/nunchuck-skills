@@ -16,6 +16,7 @@ nunchuck-skills/
 │   ├── react-review.md              # /react-review
 │   ├── rails-review.md              # /rails-review
 │   ├── data-review.md               # /data-review - schema + query review
+│   ├── security-review.md           # /security-review - deep security audit
 │   ├── assess.md                    # /assess - codebase assessment
 │   └── audit.md                     # /audit - ship confident cadences
 │
@@ -25,7 +26,8 @@ nunchuck-skills/
 │   ├── python-reviewer.md           # Python/FastAPI/SQLAlchemy review
 │   ├── react-typescript-reviewer.md # React/TypeScript/Vike review
 │   ├── rails-reviewer.md            # Ruby on Rails 8 review
-│   └── database-reviewer.md         # PostgreSQL schema + query review
+│   ├── database-reviewer.md         # PostgreSQL schema + query review
+│   └── security-reviewer.md         # Deep security audit (app code + Claude config)
 │
 ├── skills/                          # Deep reference (the knowledge base)
 │   ├── workflow.md                  # 5 modes: assess, think, design, build, audit
@@ -206,9 +208,10 @@ Claude: Looked at last 10 PRs. Findings:
 /python-review  — review Python/FastAPI code
 /react-review   — review React/TypeScript code
 /rails-review   — review Ruby on Rails code
-/data-review    — review schema and queries
-/assess         — analyze a new codebase
-/audit          — codebase health check (daily/weekly/monthly)
+/data-review      — review schema and queries
+/security-review  — deep security audit before launch
+/assess           — analyze a new codebase
+/audit            — codebase health check (daily/weekly/monthly)
 ```
 
 ## Stack Support
