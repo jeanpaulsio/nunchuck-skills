@@ -1,21 +1,23 @@
 # Nunchuck Skills
 
+![Nunchuck Skills](skills.png)
+
 > "You know, like nunchuck skills, bo hunting skills, claude code skills. Girls only want boyfriends who have great skills."
 
-A practical engineering playbook for Claude Code. Born from shipping 1,200+ commits, making real mistakes, and learning what actually matters before you write code.
+A practical engineering playbook for Claude Code. We spent like three hours on the shading the upper lip. It's probably the best playbook I've ever done.
 
-This isn't a collection of generic best practices Claude already knows. It's a workflow system grounded in patterns that survived contact with production.
-
-## What's in here
+## What's in the Tots
 
 ```
 nunchuck-skills/
 ├── commands/                        # Slash commands (triggers)
 │   ├── plan.md                      # /plan - product think + systems design
-│   ├── review.md                    # /review - stack-aware code review
+│   ├── python-review.md             # /python-review
+│   ├── react-review.md              # /react-review
+│   ├── rails-review.md              # /rails-review
+│   ├── data-review.md               # /data-review - schema + query review
 │   ├── assess.md                    # /assess - codebase assessment
-│   ├── audit.md                     # /audit - ship confident cadences
-│   └── data-review.md               # /data-review - schema + query review
+│   └── audit.md                     # /audit - ship confident cadences
 │
 ├── agents/                          # Agent definitions (the brains)
 │   ├── product-thinker.md           # Conversational requirements extraction
@@ -47,11 +49,11 @@ nunchuck-skills/
     └── ruby-rails.md
 ```
 
-## Architecture
+## How It Works
 
-Three layers:
+Three layers. Like a layered quesadilla but for code review.
 
-1. **Commands** trigger agents via slash commands (`/review`, `/plan`, `/assess`)
+1. **Commands** trigger agents via slash commands (`/python-review`, `/plan`, `/assess`)
 2. **Agents** run review/analysis with severity-based filtering and structured output
 3. **Skills** provide the deep reference patterns agents draw from
 
@@ -71,20 +73,147 @@ Most playbooks start at Build. That's why most code built on vibes breaks.
 
 ## Install
 
+Hold on, I forgot to put in the crystals.
+
 ```bash
-git clone https://github.com/jeanpaulsio/nunchuck-skills.git
-cd nunchuck-skills
+# Clone it somewhere on your machine (not inside your project)
+git clone https://github.com/jeanpaulsio/nunchuck-skills.git ~/nunchuck-skills
 
-# Install to current project (recommended)
-./install.sh
+# Option 1: Install to your current project
+cd ~/my-project
+~/nunchuck-skills/install.sh
 
-# Install globally (applies to all projects)
-./install.sh --global
+# Option 2: Install globally (applies to all projects)
+~/nunchuck-skills/install.sh --global
+```
+
+The install script copies files into `.claude/` (local) or `~/.claude/` (global). It doesn't add anything to your project's source code.
+
+## Example: Building Uncle Rico's Time Machine Rental App
+
+Here's how it looks in practice. Uncle Rico wants an app where people can rent his time machine by the hour.
+
+```
+# ──────────────────────────────────────────────
+# STEP 1: /plan — think before you build
+# ──────────────────────────────────────────────
+
+> /plan
+  I want to build a time machine rental app for my uncle's business.
+  People book time slots, pay, use the machine, and return it.
+  Sometimes they break it.
+
+Claude: Walk me through what happens from the moment someone wants
+        to rent the time machine to when they return it.
+
+> Well they'd pick a time slot, pay, show up, use the machine, and
+  bring it back. Sometimes they break it.
+
+Claude: When they break it — does Rico charge them for repairs,
+        or is there a damage deposit upfront?
+
+> Damage deposit. And he wants to block people who've broken it before.
+
+Claude: Got it. Here's what I'm hearing:
+
+  Nouns: Customer, Booking, TimeSlot, DamageReport
+  Relationships:
+    - Customer has many Bookings
+    - Booking belongs to one TimeSlot
+    - Booking has zero or one DamageReport
+  Lifecycle:
+    - Booking: reserved -> paid -> active -> returned | damaged
+  V1 scope: booking + payments + damage tracking
+  Deferred: customer banning (v2)
+
+  Ready to design the schema and API contracts?
+
+> yes
+
+Claude designs the tables, foreign keys, status enums, and
+API endpoints. Presents it for your confirmation.
+
+# ──────────────────────────────────────────────
+# STEP 2: /data-review — check the schema
+# ──────────────────────────────────────────────
+
+> /data-review
+
+Claude: [HIGH] Missing index on bookings.customer_id
+        PostgreSQL does not auto-index foreign keys.
+
+        [MEDIUM] Consider a partial unique index on
+        time_slots(start_time) WHERE available = true
+
+        Verdict: WARNING — fix the FK index before building.
+
+> fix it
+
+# ──────────────────────────────────────────────
+# STEP 3: build the feature
+# ──────────────────────────────────────────────
+
+> alright, build the booking service. start with tests.
+
+Claude writes the migration, model, service layer, API route,
+and tests. TDD — failing tests first, then implementation.
+
+# ──────────────────────────────────────────────
+# STEP 4: /python-review — before you commit
+# ──────────────────────────────────────────────
+
+> /python-review
+
+Claude: [HIGH] booking_service.py:45 — service calls commit()
+        instead of flush(). Breaks transaction atomicity if
+        a later operation in the same request fails.
+
+        [MEDIUM] Missing error path test for double-booking
+        the same time slot.
+
+        Verdict: WARNING — fix the commit() call.
+
+> fix both of those
+
+Claude fixes the flush issue and adds the error path test.
+
+> /python-review
+
+Claude: No CRITICAL or HIGH issues. Verdict: APPROVE.
+
+> ok commit this and make a PR
+
+# ──────────────────────────────────────────────
+# STEP 5: /audit — after a few weeks of shipping
+# ──────────────────────────────────────────────
+
+> /audit weekly
+
+Claude: Looked at last 10 PRs. Findings:
+
+  This sprint:
+    - Extract date validation (appears in 3 files) — S, high pain
+  Next sprint:
+    - Split booking_service.py (crossed 400 lines) — M, medium pain
+  Track:
+    - test_booking_creation hasn't failed in 2 months — S, low pain
+```
+
+### The Commands
+
+```
+/plan           — think before you build
+/python-review  — review Python/FastAPI code
+/react-review   — review React/TypeScript code
+/rails-review   — review Ruby on Rails code
+/data-review    — review schema and queries
+/assess         — analyze a new codebase
+/audit          — codebase health check (daily/weekly/monthly)
 ```
 
 ## Stack Support
 
-All three stacks included in this repo:
+All three stacks included. Whatever you want, gosh.
 
 - **Python / FastAPI / SQLAlchemy** -- patterns, reviewer agent, checklist
 - **TypeScript / React / Vike** -- patterns, reviewer agent, checklist
