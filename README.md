@@ -43,7 +43,8 @@ nunchuck-skills/
 │
 ├── rules/                           # Always-loaded guardrails
 │   ├── anti-patterns.md             # Hard-won lessons from real mistakes
-│   └── ux-patterns.md               # Scroll architecture, touch targets, mobile layout
+│   ├── ux-patterns.md               # Scroll architecture, touch targets, mobile layout
+│   └── git-workflow.md              # Commits, branches, PRs, research before building
 │
 └── checklists/                      # Pre-commit checklists
     ├── python-fastapi.md
@@ -153,10 +154,10 @@ Claude: [HIGH] Missing index on bookings.customer_id
 **3. Build the feature**
 
 ```
-> alright, build the booking service. start with tests.
+> alright, build the booking service
 
 Claude writes the migration, model, service layer, API route,
-and tests. TDD - failing tests first, then implementation.
+and tests alongside the implementation.
 ```
 
 **4. `/python-review` - before you commit**
@@ -226,7 +227,7 @@ All three stacks included. Whatever you want, gosh.
 - The person describes their world. The system translates it into engineering decisions.
 - Only include things Claude genuinely doesn't know or gets wrong without guidance.
 - Only extract patterns when they appear 3+ times.
-- Write tests with features, not after.
+- Write tests alongside features, not in a separate backfill sprint.
 - Your CLAUDE.md is more valuable than any generic skill.
 
 ## Credits

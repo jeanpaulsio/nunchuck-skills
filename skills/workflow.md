@@ -1,13 +1,13 @@
 ---
 name: workflow
-description: 5-mode engineering workflow -- assess, product think, design, build, audit. The backbone of how features go from idea to shipped.
+description: 5-phase engineering workflow - assess, product think, design, build, audit. The backbone of how features go from idea to shipped.
 ---
 
 # Workflow
 
-Five modes that take you from "I have an idea" to "it's shipped and I'm confident." Move through them in order, but jump back when new information surfaces.
+Five phases that take you from "I have an idea" to "it's shipped and I'm confident." Move through them in order, but jump back when new information surfaces.
 
-## Mode 1: Assess
+## Phase 1: Assess
 
 **When:** Starting work on any codebase, new or existing.
 
@@ -17,7 +17,7 @@ Five modes that take you from "I have an idea" to "it's shipped and I'm confiden
 
 **Exit:** You can describe the codebase in 3-4 sentences and the user agrees.
 
-## Mode 2: Product Think
+## Phase 2: Product Think
 
 **When:** Before writing any code for a new feature or project.
 
@@ -25,7 +25,7 @@ Use the **product-thinker** agent. This is a conversation, not a form. The user 
 
 **Exit:** Nouns, relationships, lifecycles, v1 scope, and deferred items are captured. The user recognizes their own words in the summary.
 
-## Mode 3: Design
+## Phase 3: Design
 
 **When:** After Product Think produces a clear picture.
 
@@ -41,31 +41,45 @@ Use the `/data-review` command to validate schema decisions against the database
 
 **Exit:** Every table, its columns, its relationships, and the main API endpoints are defined. User confirms.
 
-## Mode 4: Build
+## Phase 4: Build
 
 **When:** After Design produces a clear plan.
 
 ### Implementation Order
 
-New feature: migration -> model -> service (+ tests) -> route (+ tests) -> frontend (+ tests)
+New feature: migration -> model -> service -> route -> frontend
 
-Bug fix: write failing test -> verify it fails -> fix implementation -> verify it passes
+Bug fix: write a failing test that reproduces the bug FIRST, then fix it.
 
-### The TDD Loop
+### Testing (How We Actually Do It)
 
-```
-Write failing test → Run (RED) → Implement → Run (GREEN) → Refactor → Next test
-```
+Strict TDD (red-green-refactor on every feature) sounds good in theory. In practice, here's what actually works:
 
-Write tests WITH features, not after. A test backfill sprint is a sign this was skipped.
+**Bug fixes: test first.** Write a failing test that proves the bug exists. Then fix it. Then verify the test passes. This is the one place strict TDD pays for itself every time.
+
+**New features: test alongside.** Build the feature, write tests as you go or immediately after each piece. Don't save testing for a separate sprint. A test backfill is a sign this step was skipped, and the fix-to-feat ratio will show it.
+
+**Refactoring: tests must exist before you start.** If there are no tests for the code you're refactoring, write them first. Then refactor. Then verify they still pass.
+
+The goal is not test-first purity. The goal is that tests exist when the feature ships, not two weeks later in a backfill sprint.
 
 ### Pre-Commit
 
-Run the stack-specific checklist before every commit. Use `/review` to run the appropriate reviewer agent.
+Run the stack-specific checklist and reviewer before every commit:
+
+```
+/python-review    (Python projects)
+/react-review     (React/TypeScript projects)
+/rails-review     (Rails projects)
+```
 
 **Exit:** Tests pass, linter is clean, reviewer approves.
 
-## Mode 5: Audit
+### Git
+
+Branch and PR always. Never push to main. Conventional commits (`feat:`, `fix:`, `refactor:`). See `rules/git-workflow.md` for details.
+
+## Phase 5: Audit
 
 **When:** Ongoing, on cadence.
 
@@ -75,7 +89,7 @@ See the **ship-confident** skill for the full checklist at each cadence.
 
 **Exit:** Findings ranked and either fixed inline (daily), ticketed (weekly), or added to sprint planning (monthly).
 
-## Mode Transitions
+## Phase Transitions
 
 - **Assess -> Product Think:** When you understand the landscape
 - **Product Think -> Design:** When nouns, relationships, and v1 scope are clear
