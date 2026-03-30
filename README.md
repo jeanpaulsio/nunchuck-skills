@@ -2,7 +2,7 @@
 
 ![Nunchuck Skills](skills.png)
 
-> "You know, like nunchuck skills, bo hunting skills, claude code skills. Girls only want boyfriends who have great skills."
+> "You know, like nunchuck skills, bow hunting skills, claude code skills. Girls only want boyfriends who have great skills."
 
 A practical engineering playbook for Claude Code. We spent like three hours on the shading the upper lip. It's probably the best playbook I've ever done.
 
