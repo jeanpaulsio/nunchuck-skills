@@ -48,10 +48,11 @@ When invoked:
 - **Integer enum values**: Use string values `{ active: "active" }` for DB readability
 - **N+1 queries**: Missing `includes`/`preload` -- enable `strict_loading` in development
 
-### HIGH -- Solid Queue
-- **No `retry_on` in ApplicationJob**: Solid Queue doesn't retry by default (unlike Sidekiq)
-- **Non-idempotent jobs**: Missing guard clause for already-processed records
-- **Missing `discard_on ActiveRecord::RecordNotFound`**: Deleted records shouldn't retry forever
+### HIGH -- Background Jobs (Sidekiq / Solid Queue)
+- **Non-idempotent jobs**: Missing guard clause for already-processed records (retries create duplicates)
+- **`find` instead of `find_by` in jobs**: `find` raises on deleted records, retries 25 times, fills error tracker. Use `find_by` with early return
+- **Missing `sidekiq_retries_exhausted`**: No handling when all retries fail
+- **No `retry_on` in ApplicationJob (Solid Queue only)**: Solid Queue doesn't retry by default unlike Sidekiq
 
 ### HIGH -- Migrations
 - **`remove_column` without `ignored_columns`**: Crashes on deploy (ActiveRecord caches columns)

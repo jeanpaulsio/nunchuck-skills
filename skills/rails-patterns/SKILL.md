@@ -1,6 +1,6 @@
 ---
 name: rails-patterns
-description: Deep reference for Ruby on Rails 8 patterns -- Hotwire/Turbo 8 morphing, Solid Queue, service objects, minitest + fixtures, ActiveRecord, security, deployment with Kamal. Focused on Rails 8-specific and non-obvious patterns.
+description: Deep reference for Ruby on Rails 8 patterns -- Hotwire/Turbo 8 morphing, Sidekiq + Solid Queue, service objects, minitest + fixtures, ActiveRecord, security, deployment with Kamal. Focused on Rails 8-specific and non-obvious patterns.
 origin: claude-rails (audited, rebuilt, and expanded for nunchuck-skills)
 ---
 
@@ -18,7 +18,7 @@ Production patterns for Rails 8 applications. Focused on what's non-obvious, Rai
 2. [Service Objects](#service-objects)
 3. [Controller Patterns](#controller-patterns)
 4. [Model Patterns](#model-patterns)
-5. [Solid Queue](#solid-queue)
+5. [Background Jobs (Sidekiq + Solid Queue)](#background-jobs)
 6. [Authentication (Rails 8 Generator)](#authentication)
 7. [Testing (Minitest + Fixtures)](#testing)
 8. [Database & Migrations](#database--migrations)
@@ -348,68 +348,19 @@ posts.first.comments  # works
 
 ---
 
-## Solid Queue
+## Background Jobs
 
-### Configuration
+### Sidekiq
 
-```yaml
-# config/solid_queue.yml
-production:
-  dispatchers:
-    - polling_interval: 1
-      batch_size: 500
-  workers:
-    - queues: critical
-      threads: 5
-      polling_interval: 0.1
-    - queues: default
-      threads: 3
-      polling_interval: 1
-    - queues: mailers
-      threads: 10
-      polling_interval: 2
-```
+#### Idempotent Job Design
 
-### Concurrency Controls (Unique to Solid Queue)
+The most important pattern. Sidekiq retries failed jobs 25 times by default. If your job isn't idempotent, retries create duplicates.
 
 ```ruby
-class InvoiceExportJob < ApplicationJob
-  limits_concurrency to: 1, key: -> (account_id) { "invoice_export_#{account_id}" }
+# BAD: not idempotent - retries create duplicates
+class ProcessPaymentJob
+  include Sidekiq::Job
 
-  def perform(account_id)
-    # Only one export per account at a time
-  end
-end
-```
-
-Sidekiq has nothing like this built-in. This is Solid Queue's killer feature.
-
-### Base Job Class with Retry + Error Reporting
-
-```ruby
-class ApplicationJob < ActiveJob::Base
-  retry_on StandardError, wait: :exponentially_longer, attempts: 5
-  discard_on ActiveJob::DeserializationError
-  discard_on ActiveRecord::RecordNotFound
-
-  rescue_from(StandardError) do |exception|
-    Rails.error.report(exception, handled: true, context: {
-      job_class: self.class.name,
-      job_id: job_id,
-      arguments: arguments,
-    })
-    raise # re-raise so retry_on can handle it
-  end
-end
-```
-
-**Critical gotcha:** Solid Queue does NOT retry by default (unlike Sidekiq's 25 retries). You must configure `retry_on` explicitly.
-
-### Idempotent Job Design
-
-```ruby
-# BAD: not idempotent -- retries create duplicates
-class ProcessPaymentJob < ApplicationJob
   def perform(order_id)
     order = Order.find(order_id)
     PaymentGateway.charge(order.amount) # retried = double charge!
@@ -418,7 +369,9 @@ class ProcessPaymentJob < ApplicationJob
 end
 
 # GOOD: check-before-act
-class ProcessPaymentJob < ApplicationJob
+class ProcessPaymentJob
+  include Sidekiq::Job
+
   def perform(order_id)
     order = Order.find(order_id)
     return if order.paid? # already processed
@@ -429,7 +382,118 @@ class ProcessPaymentJob < ApplicationJob
 end
 ```
 
-### Recurring Jobs
+#### Use `find_by` with Early Return, Not `find`
+
+```ruby
+# BAD: raises RecordNotFound, retries 25 times, fills your error tracker
+def perform(user_id)
+  user = User.find(user_id) # deleted between enqueue and execution
+  user.send_welcome_email
+end
+
+# GOOD: silently skip deleted records
+def perform(user_id)
+  user = User.find_by(id: user_id)
+  return unless user
+
+  user.send_welcome_email
+end
+```
+
+#### Handle Exhausted Retries
+
+```ruby
+class ImportJob
+  include Sidekiq::Job
+  sidekiq_options retry: 5
+
+  sidekiq_retries_exhausted do |job, exception|
+    Rails.error.report(exception, context: {
+      job_class: job["class"],
+      job_id: job["jid"],
+      args: job["args"],
+    })
+    # Update the record so the UI can show the failure
+    Import.find_by(id: job["args"].first)&.update!(status: :failed)
+  end
+
+  def perform(import_id)
+    import = Import.find_by(id: import_id)
+    return unless import
+    # ... do the work
+  end
+end
+```
+
+#### Testing Job Logic Directly
+
+Test the `perform` method, not Sidekiq infrastructure:
+
+```ruby
+test "processes payment" do
+  order = orders(:unpaid)
+  ProcessPaymentJob.new.perform(order.id)
+  assert_equal "paid", order.reload.status
+end
+
+test "skips already paid orders" do
+  order = orders(:paid)
+  ProcessPaymentJob.new.perform(order.id)
+  # assert no duplicate charge - PaymentGateway not called
+end
+
+test "handles deleted orders" do
+  ProcessPaymentJob.new.perform(SecureRandom.uuid)
+  # no error raised
+end
+```
+
+#### Scheduling
+
+```ruby
+# Immediate
+ImportJob.perform_async(import.id)
+
+# Delayed
+ReminderJob.perform_in(1.hour, user.id)
+
+# Scheduled
+ReportJob.perform_at(Date.tomorrow.noon, account.id)
+```
+
+For recurring jobs, use `sidekiq-cron` or `sidekiq-scheduler`:
+
+```yaml
+# config/sidekiq_cron.yml
+daily_summary:
+  cron: "0 9 * * *"
+  class: DailySummaryJob
+  queue: mailers
+```
+
+### Solid Queue (Rails 8 Default)
+
+If you're on Rails 8 defaults instead of Sidekiq:
+
+#### Key Differences from Sidekiq
+
+- **No retry by default.** You must configure `retry_on` explicitly in your job classes. Sidekiq retries 25 times by default.
+- Uses database tables instead of Redis for job storage
+- Built-in concurrency controls (Sidekiq needs `sidekiq-unique-jobs` gem for this):
+
+```ruby
+class InvoiceExportJob < ApplicationJob
+  limits_concurrency to: 1, key: -> (account_id) { "invoice_export_#{account_id}" }
+  retry_on StandardError, wait: :exponentially_longer, attempts: 5
+  discard_on ActiveRecord::RecordNotFound
+
+  def perform(account_id)
+    # Only one export per account at a time
+  end
+end
+```
+
+#### Recurring Jobs
 
 ```yaml
 # config/recurring.yml
@@ -438,9 +502,6 @@ production:
     class: DailySummaryJob
     schedule: every day at 9am
     queue: mailers
-  api_sync:
-    class: ExternalApiSyncJob
-    schedule: "*/15 * * * *"
 ```
 
 ---
@@ -737,7 +798,8 @@ Database-backed cache using FIFO eviction (not LRU like Redis).
 | `Model.find(params[:id])` unscoped | Scope to current user: `current_user.posts.find(...)` |
 | `permit!` on params | Never. Whitelist every field explicitly |
 | Integer enum values | Use string values: `enum :status, { active: "active" }` |
-| No `retry_on` in ApplicationJob | Solid Queue doesn't retry by default |
+| Non-idempotent Sidekiq jobs | Check-before-act pattern, `find_by` with early return |
+| No `retry_on` in ApplicationJob (Solid Queue) | Solid Queue doesn't retry by default, unlike Sidekiq |
 | `add_index` without `algorithm: :concurrently` | Blocks writes on large tables |
 | `remove_column` without `ignored_columns` | Crashes on deploy until column is removed |
 | Module-scope store in Wrapper/Layout | Cross-request data leaks during SSR |
