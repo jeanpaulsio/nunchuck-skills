@@ -1,8 +1,8 @@
 ---
-description: Codebase assessment. Analyzes stack, schema, tests, churn, and deployment constraints.
+description: Scout a codebase. Analyzes stack, schema, tests, churn, and deployment constraints.
 ---
 
-# Assess
+# Scout
 
 Run the **codebase-assessor** agent to analyze the current codebase:
 

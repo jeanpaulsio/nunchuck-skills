@@ -17,7 +17,7 @@ nunchuck-skills/
 │   ├── rails-review.md              # /rails-review
 │   ├── data-review.md               # /data-review - schema + query review
 │   ├── security-review.md           # /security-review - deep security audit
-│   ├── assess.md                    # /assess - codebase assessment
+│   ├── scout.md                    # /scout - codebase assessment
 │   └── audit.md                     # /audit - ship confident cadences
 │
 ├── agents/                          # Agent definitions (the brains)
@@ -55,7 +55,7 @@ nunchuck-skills/
 
 Three layers. Like a layered quesadilla but for code review.
 
-1. **Commands** trigger agents via slash commands (`/python-review`, `/plan`, `/assess`)
+1. **Commands** trigger agents via slash commands (`/python-review`, `/plan`, `/scout`)
 2. **Agents** run review/analysis with severity-based filtering and structured output
 3. **Skills** provide the deep reference patterns agents draw from
 
@@ -65,7 +65,7 @@ Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 
 | Phase | How | When |
 |------|-----|------|
-| **Assess** | `/assess` | Starting a new project or joining an existing codebase |
+| **Assess** | `/scout` | Starting a new project or joining an existing codebase |
 | **Product Think** | `/plan` | Before writing any code for a new feature |
 | **Design** | `/plan` then `/data-review` | After product decisions, before implementation |
 | **Build** | Code, then `/python-review` `/react-review` `/rails-review` | The actual coding |
@@ -210,7 +210,7 @@ Claude: Looked at last 10 PRs. Findings:
 /rails-review   — review Ruby on Rails code
 /data-review      — review schema and queries
 /security-review  — deep security audit before launch
-/assess           — analyze a new codebase
+/scout           — analyze a new codebase
 /audit            — codebase health check (daily/weekly/monthly)
 ```
 

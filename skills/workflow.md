@@ -11,7 +11,7 @@ Five modes that take you from "I have an idea" to "it's shipped and I'm confiden
 
 **When:** Starting work on any codebase, new or existing.
 
-**Existing codebase:** Use the `/assess` command or **codebase-assessor** agent. Investigate stack, schema, tests, churn, and deployment constraints before suggesting anything.
+**Existing codebase:** Use the `/scout` command or **codebase-assessor** agent. Investigate stack, schema, tests, churn, and deployment constraints before suggesting anything.
 
 **Greenfield:** Ask about experience, preferences, deployment target, and expected scale. Recommend a stack that plays to their strengths.
 
