@@ -10,33 +10,38 @@ This isn't a collection of generic best practices Claude already knows. It's a w
 
 ```
 nunchuck-skills/
-├── commands/                     # Slash commands (triggers)
-│   ├── plan.md                   # /plan - product think + systems design
-│   ├── review.md                 # /review - stack-aware code review
-│   ├── assess.md                 # /assess - codebase assessment
-│   ├── audit.md                  # /audit - ship confident cadences
-│   └── data-review.md            # /data-review - schema + query review
+├── commands/                        # Slash commands (triggers)
+│   ├── plan.md                      # /plan - product think + systems design
+│   ├── review.md                    # /review - stack-aware code review
+│   ├── assess.md                    # /assess - codebase assessment
+│   ├── audit.md                     # /audit - ship confident cadences
+│   └── data-review.md               # /data-review - schema + query review
 │
-├── agents/                       # Agent definitions (the brains)
-│   ├── product-thinker.md        # Conversational requirements extraction
-│   ├── codebase-assessor.md      # Stack, schema, test, churn analysis
-│   ├── python-reviewer.md        # Python/FastAPI/SQLAlchemy code review
-│   ├── database-reviewer.md      # Schema design + query pattern review
-│   └── security-reviewer.md      # OWASP + config scanning
+├── agents/                          # Agent definitions (the brains)
+│   ├── product-thinker.md           # Conversational requirements extraction
+│   ├── codebase-assessor.md         # Stack, schema, test, churn analysis
+│   ├── python-reviewer.md           # Python/FastAPI/SQLAlchemy review
+│   ├── react-typescript-reviewer.md # React/TypeScript/Vike review
+│   ├── rails-reviewer.md            # Ruby on Rails 8 review
+│   └── database-reviewer.md         # PostgreSQL schema + query review
 │
-├── skills/                       # Deep reference (the knowledge base)
-│   ├── workflow.md               # 5 modes with war stories
+├── skills/                          # Deep reference (the knowledge base)
+│   ├── workflow.md                  # 5 modes: assess, think, design, build, audit
+│   ├── ship-confident.md            # Daily/weekly/monthly audit cadences
 │   ├── python-fastapi-patterns/
-│   │   └── SKILL.md              # FastAPI + SQLAlchemy + Pydantic patterns
-│   ├── database-patterns/
-│   │   └── SKILL.md              # Schema, query, migration patterns
-│   └── ship-confident.md         # Audit cadences
+│   │   └── SKILL.md                 # FastAPI + SQLAlchemy + Pydantic patterns
+│   ├── react-typescript-patterns/
+│   │   └── SKILL.md                 # React 19 + Vike + TanStack Query patterns
+│   ├── rails-patterns/
+│   │   └── SKILL.md                 # Rails 8 + Hotwire + Solid Queue patterns
+│   └── database-patterns/
+│       └── SKILL.md                 # PostgreSQL schema, query, migration patterns
 │
-├── rules/                        # Always-loaded guardrails
-│   ├── data-layer.md             # Schema design principles
-│   └── anti-patterns.md          # Hard-won lessons from real mistakes
+├── rules/                           # Always-loaded guardrails
+│   ├── anti-patterns.md             # Hard-won lessons from real mistakes
+│   └── ux-patterns.md               # Scroll architecture, touch targets, mobile layout
 │
-└── checklists/                   # Pre-commit checklists
+└── checklists/                      # Pre-commit checklists
     ├── python-fastapi.md
     ├── typescript-react.md
     └── ruby-rails.md
@@ -44,15 +49,15 @@ nunchuck-skills/
 
 ## Architecture
 
-Three layers, same pattern as [claude-react-typescript](https://github.com/jeanpaulsio/claude-react-typescript) and [claude-rails](https://github.com/jeanpaulsio/claude-rails):
+Three layers:
 
-1. **Commands** trigger agents via slash commands
-2. **Agents** run the review/analysis with severity-based filtering
+1. **Commands** trigger agents via slash commands (`/review`, `/plan`, `/assess`)
+2. **Agents** run review/analysis with severity-based filtering and structured output
 3. **Skills** provide the deep reference patterns agents draw from
 
-Plus **workflow** (the 5 modes) and **rules** (always-loaded guardrails).
+Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 
-## The 5 modes
+## The 5 Modes
 
 | Mode | What it does | When to use |
 |------|-------------|-------------|
@@ -77,21 +82,14 @@ cd nunchuck-skills
 ./install.sh --global
 ```
 
-### Manual install
+## Stack Support
 
-```bash
-# Local (current project only)
-cp -r commands/ .claude/commands/nunchuck-skills/
-cp -r agents/ .claude/agents/nunchuck-skills/
-cp -r skills/ .claude/skills/nunchuck-skills/
-cp -r rules/ .claude/rules/nunchuck-skills/
+All three stacks included in this repo:
 
-# Global (all projects)
-cp -r commands/ ~/.claude/commands/nunchuck-skills/
-cp -r agents/ ~/.claude/agents/nunchuck-skills/
-cp -r skills/ ~/.claude/skills/nunchuck-skills/
-cp -r rules/ ~/.claude/rules/nunchuck-skills/
-```
+- **Python / FastAPI / SQLAlchemy** -- patterns, reviewer agent, checklist
+- **TypeScript / React / Vike** -- patterns, reviewer agent, checklist
+- **Ruby on Rails 8** -- patterns, reviewer agent, checklist
+- **PostgreSQL** -- database patterns and reviewer (cross-stack)
 
 ## Philosophy
 
@@ -100,14 +98,6 @@ cp -r rules/ ~/.claude/rules/nunchuck-skills/
 - Only extract patterns when they appear 3+ times.
 - Write tests with features, not after.
 - Your CLAUDE.md is more valuable than any generic skill.
-
-## Stack support
-
-The workflow and principles are stack-agnostic. The patterns and checklists are stack-specific:
-
-- **Python / FastAPI / SQLAlchemy** -- included in this repo
-- **TypeScript / React** -- see [claude-react-typescript](https://github.com/jeanpaulsio/claude-react-typescript)
-- **Ruby on Rails** -- see [claude-rails](https://github.com/jeanpaulsio/claude-rails)
 
 ## Credits
 
