@@ -83,7 +83,25 @@ A recurring theme: building first, discovering constraints second.
 - Sentry: `replayIntegration` blocks all pointer events
 - Page transitions: CSS animations conflict with Vike SSR
 - CI path filtering: Broke the pipeline, reverted immediately
+- NODE_ENV=production: PaaS sets this, `npm ci` skips devDependencies, build tools vanish
+- SSR deployment: SSR apps need a running web service, not static hosting -- static deploy serves an empty shell
 
 **The pattern:** Every revert in the commit history traces back to insufficient research before implementation.
 
-**The fix:** Mode 1 (Assess) exists for this reason. 10 minutes of platform research prevents an hour of debugging and a revert.
+**The fix:** `/scout` exists for this reason. 10 minutes of platform research prevents an hour of debugging and a revert.
+
+## PaaS Deployment Traps
+
+**The mistake:** Putting build tools (`vite`, `typescript`, `tailwindcss`) in `devDependencies` and deploying to a PaaS that sets `NODE_ENV=production`.
+
+**The cost:** `npm ci` silently skips devDependencies. Build fails. You add `--include=dev` to the build command but the env var overrides it.
+
+**The lesson:** If `npm run build` needs it, it goes in `dependencies`. Only test-only tools (`vitest`, `@testing-library`) go in `devDependencies`. This applies to Render, Heroku, Railway, Fly, and any PaaS that sets `NODE_ENV=production`.
+
+## SQLite Is Not Postgres
+
+**The mistake:** Running tests against SQLite "for speed" and deploying to Postgres.
+
+**The cost:** SQLite silently ignores enum constraints, foreign key enforcement (off by default), row-level locking, and type mismatches. Tests pass. Production crashes.
+
+**The lesson:** Always test against the same database you deploy to. The 200ms you save per test run is not worth the production incident.

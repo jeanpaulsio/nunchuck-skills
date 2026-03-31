@@ -505,6 +505,16 @@ export function guard(pageContext: PageContext): void {
 
 **Never use `+guard.client.ts` in SSR mode.** Server won't run it, so unauthenticated requests get through on first load.
 
+### Vike Gotchas
+
+**`+data` hooks are NOT cumulative.** Layouts stack (child inside parent), but `+data` does not. If a layout needs data, use React Query inside the component instead of `+data`.
+
+**Named exports only for guards and data.** `export function guard()` works. `export default function guard()` silently does nothing.
+
+**Never use `localStorage` for auth in SSR apps.** `localStorage` doesn't exist on the server. Guards run during SSR and will crash or skip the auth check. Use cookies -- they're available in both environments via `pageContext.headers.cookie` (server) and `document.cookie` (client).
+
+**`typeof window === 'undefined'` for any browser API in guards or store init.** Guards run on both server and client. Any `window`, `document`, `localStorage`, or `navigator` reference needs the check.
+
 ---
 
 ## Data Fetching
@@ -685,6 +695,46 @@ vi.mock('@dnd-kit/core', () => ({
 **`null` vs `undefined`.** Types like `error?: string` accept `undefined` but reject `null` in strict mode. Match optionality exactly in mocks.
 
 **Always run `tsc --noEmit` on test files.** Vitest ignores type errors at runtime.
+
+**`vi.mock` must come before the import that uses it.** Vitest hoists `vi.mock` calls, but if you're mocking a module that another import depends on, declare the mock first:
+
+```tsx
+vi.mock('@/lib/cookies', () => ({
+  getCookie: vi.fn(),
+  setCookie: vi.fn(),
+}))
+
+// THEN import the module that uses cookies
+import apiClient from '@/services/client'
+```
+
+**Use `Mock` type cast, not `vi.mocked()` for axios.** `vi.mocked()` causes tsc errors with axios types:
+
+```tsx
+import apiClient from '@/services/client'
+import type { Mock } from 'vitest'
+
+vi.mock('@/services/client', () => ({ default: { post: vi.fn(), get: vi.fn() } }))
+const mockedPost = apiClient.post as Mock
+```
+
+**Explicit `cleanup()` in beforeEach.** RTL auto-cleanup can fail in edge cases, causing "Found multiple elements" errors from DOM leaking between tests:
+
+```tsx
+import { cleanup } from '@testing-library/react'
+beforeEach(() => { cleanup() })
+```
+
+**jsdom doesn't honor `max-age=0` for cookie deletion.** Clear cookies manually between tests:
+
+```tsx
+function clearCookies() {
+  document.cookie.split(';').forEach(c => {
+    document.cookie = `${c.split('=')[0].trim()}=; max-age=0`
+  })
+}
+beforeEach(clearCookies)
+```
 
 ---
 
@@ -911,3 +961,10 @@ export default function Error({ error, reset }: { error: Error; reset: () => voi
 | Missing `cursor-pointer` on clickable elements | Add to all buttons, links, selects |
 | Boolean toggle in URL state | `useSearchParamState` with `replaceState` |
 | `console.log` left in production | Remove before merge |
+| `localStorage` for auth in SSR | Use cookies (available in both SSR and client) |
+| `+guard.client.ts` in SSR mode | Use `+guard.ts` (runs on both server and client) |
+| `export default` on guard/data | Must be named export: `export function guard()` |
+| `vi.mock` after the import that uses it | Put `vi.mock` before the import |
+| `vi.mocked()` on axios | Use `as Mock` type cast instead |
+| RTL DOM leaking between tests | Add explicit `cleanup()` in `beforeEach` |
+| jsdom `max-age=0` not deleting cookies | Clear cookies manually in `beforeEach` |
