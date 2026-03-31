@@ -52,4 +52,4 @@ ls -la "$TARGET/agents/nunchuck-skills/" 2>/dev/null && echo "" || true
 ls -la "$TARGET/skills/nunchuck-skills/" 2>/dev/null && echo "" || true
 ls -la "$TARGET/rules/nunchuck-skills/" 2>/dev/null && echo "" || true
 echo ""
-echo "Ready. Start with: \"Let's assess this codebase\" or \"I have an idea for an app.\""
+echo "Ready. Start with: \"/scout\" or \"/plan\""

@@ -66,7 +66,7 @@ Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 
 | Phase | How | When |
 |------|-----|------|
-| **Assess** | `/scout` | First time in a codebase or starting from scratch |
+| **Scout** | `/scout` | First time in a codebase or starting from scratch |
 | **Product Think** | `/plan` | Before writing any code for a new feature |
 | **Design** | `/plan` then `/data-review` | After product decisions, before implementation |
 | **Build** | Code, then `/python-review` `/react-review` `/rails-review` | The actual coding |

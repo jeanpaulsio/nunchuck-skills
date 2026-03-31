@@ -1,13 +1,13 @@
 ---
 name: workflow
-description: 5-phase engineering workflow - assess, product think, design, build, audit. The backbone of how features go from idea to shipped.
+description: 5-phase engineering workflow - scout, product think, design, build, audit. The backbone of how features go from idea to shipped.
 ---
 
 # Workflow
 
 Five phases that take you from "I have an idea" to "it's shipped and I'm confident." Move through them in order, but jump back when new information surfaces.
 
-## Phase 1: Assess
+## Phase 1: Scout
 
 **When:** Starting work on any codebase, new or existing.
 
@@ -91,9 +91,9 @@ See the **ship-confident** skill for the full checklist at each cadence.
 
 ## Phase Transitions
 
-- **Assess -> Product Think:** When you understand the landscape
+- **Scout -> Product Think:** When you understand the landscape
 - **Product Think -> Design:** When nouns, relationships, and v1 scope are clear
 - **Design -> Build:** When schema and API contracts are defined
 - **Build -> Audit:** Continuously, on cadence
 - **Any -> Product Think:** When a new requirement changes the data model
-- **Any -> Assess:** When switching to a new codebase
+- **Any -> Scout:** When switching to a new codebase
