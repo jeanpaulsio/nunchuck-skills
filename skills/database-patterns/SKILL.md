@@ -362,6 +362,10 @@ Migration generators produce false positives:
 
 **Always read every migration before running it.** Delete the noise.
 
+### Never Edit an Applied Migration
+
+Once a migration has run (locally, in CI, or in prod), it is immutable. If you need to fix something, write a new migration on top. Editing an applied migration causes schema drift: the database ran the old version, the file now says something different, and `upgrade head` is a no-op because it thinks the migration already ran.
+
 ### Dangerous Operations: Lock Awareness
 
 Some DDL operations lock the entire table. On a busy table, this means downtime.

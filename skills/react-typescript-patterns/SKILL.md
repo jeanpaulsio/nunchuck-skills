@@ -476,6 +476,35 @@ import { ClientOnly } from 'vike-react/ClientOnly'
 </ClientOnly>
 ```
 
+### Navigation Decision Matrix
+
+| Situation | Use |
+|-----------|-----|
+| Inside `guard()` or `data()` | `throw redirect("/path")` from `vike/abort` |
+| After form submission / event handler | `navigate("/path")` from `vike/client/router` |
+| Show different page without URL change | `throw render("/path")` from `vike/abort` |
+| Auth error recovery (stale state) | `window.location.href` (hard nav to reset everything) |
+
+**Never use `window.location.href` for normal navigation.** It does a full page reload and loses all React state. The only exception is auth error recovery where you want to reset everything.
+
+### Guard Must Be Isomorphic
+
+Guards run server-side during SSR and client-side during navigation. Cookie access differs between the two:
+
+```tsx
+export function guard(pageContext: PageContext): void {
+  const cookieStr = typeof window === 'undefined'
+    ? (pageContext.headers?.cookie ?? '')  // server: read from request headers
+    : document.cookie                       // client: read from document
+  
+  if (!getCookie('access_token', cookieStr)) {
+    throw redirect('/')
+  }
+}
+```
+
+**Never use `+guard.client.ts` in SSR mode.** Server won't run it, so unauthenticated requests get through on first load.
+
 ---
 
 ## Data Fetching
