@@ -12,6 +12,7 @@ A practical engineering playbook for Claude Code. We spent like three hours on t
 nunchuck-skills/
 ├── commands/                        # Slash commands (triggers)
 │   ├── plan.md                      # /plan - product think + systems design
+│   ├── gimme-ur-tots.md             # /gimme-ur-tots - execute an approved plan end-to-end
 │   ├── python-review.md             # /python-review
 │   ├── react-review.md              # /react-review
 │   ├── rails-review.md              # /rails-review
@@ -69,7 +70,7 @@ Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 | **Scout** | `/scout` | First time in a codebase or starting from scratch |
 | **Product Think** | `/plan` | Before writing any code for a new feature |
 | **Design** | `/plan` then `/data-review` | After product decisions, before implementation |
-| **Build** | Code, then `/python-review` `/react-review` `/rails-review` | The actual coding |
+| **Build** | `/gimme-ur-tots` | The actual coding — implement, review, audit, hand off |
 | **Audit** | `/audit daily\|weekly\|monthly` | Ongoing codebase health |
 
 Most vibe coders live in Build and wonder why everything breaks. It's like Rex Kwon Do without the training. You think you're tough? Forget about it.
@@ -204,6 +205,7 @@ Claude: Looked at last 10 PRs. Findings:
 
 ```
 /plan              think before you build
+/gimme-ur-tots     execute an approved plan end-to-end
 /python-review     review Python/FastAPI code
 /react-review      review React/TypeScript code
 /rails-review      review Ruby on Rails code
@@ -212,6 +214,41 @@ Claude: Looked at last 10 PRs. Findings:
 /scout             scout a new or unfamiliar codebase
 /audit             codebase health check (daily/weekly/monthly)
 ```
+
+## Gimme Ur Tots
+
+`/gimme-ur-tots` is the command you run once a plan is approved. It replaces the wall of instructions you'd otherwise type every time ("make commits, run the linter, add tests, flag assumptions..."). Everything below happens automatically, in order.
+
+**1. Implement step by step**
+
+Works through the implementation plan in order. Each step is completed fully before moving to the next — no stubs, no skipped error paths, no TODOs left as a way to move faster.
+
+**2. Tests alongside the code**
+
+Every new function, service, route, or component gets tests written with it, not in a backfill later. For bug fixes: the failing test is written first, then the fix.
+
+**3. Surface assumptions**
+
+Any decision that isn't explicitly defined in the plan and could affect product behavior gets called out inline as `[ASSUMPTION: ...]`. Small implementation details don't need flagging. Anything that touches what the feature does or how it behaves does.
+
+**4. Commit at real stopping points**
+
+Commits happen at meaningful units of working, tested functionality — not after every file, not as one giant commit at the end. A migration alone isn't a stopping point. A migration + model + service with passing tests is. Every commit only happens when lint, typecheck, format, and tests are all green.
+
+**5. Review pass**
+
+When implementation is complete, detects which stacks were touched and runs the appropriate reviewers:
+
+- Python/FastAPI changed → `/python-review`
+- React/TypeScript changed → `/react-review`
+- Rails changed → `/rails-review`
+- Schema or queries changed → `/data-review`
+
+Addresses everything the reviewers surface. Re-runs until clean.
+
+**6. QA plan**
+
+Final output is a QA plan: what to manually verify, in what order, and what edge cases to hit.
 
 ## Stack Support
 
