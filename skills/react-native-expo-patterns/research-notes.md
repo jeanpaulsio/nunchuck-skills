@@ -792,3 +792,131 @@ With `autoIncrement: true` in the production profile, EAS bumps the build number
 - **Sentry (sentry-expo)** — source-mapped crash reporting. Uploads maps per build via EAS Build hook.
 - **Critical:** tag errors with `updateId` so you know exactly which OTA caused a spike.
 
+## Topic 10: iOS vs Android gotchas
+
+The #1 source of bugs in RN apps: assuming something works the same on both platforms because it worked in one. Always test on both simulators, and ideally real devices for each.
+
+### Platform detection
+```tsx
+import { Platform } from 'react-native'
+
+Platform.OS              // 'ios' | 'android' | 'web'
+Platform.Version         // iOS: string '16.0' | Android: number 33
+Platform.select({ ios: 'a', android: 'b', default: 'c' })
+```
+- Prefer `Platform.select` in style/prop values; cleaner than `Platform.OS === 'ios' ? a : b`.
+- Never key features off `Platform.Version` for iOS without parsing — it's a string.
+
+### Shadows
+- **iOS:** use `shadowColor`, `shadowOffset`, `shadowOpacity`, `shadowRadius`. No effect on Android.
+- **Android:** use `elevation` (a number). No fine control — just depth. No effect on iOS.
+- Must set BOTH if you want a shadow on both platforms.
+- With NativeWind: `shadow-md` works on iOS; Android needs explicit `elevation-*` via style or a platform-specific class.
+
+```tsx
+// Shadow that works on both
+<View
+  style={{
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 4,  // iOS
+    elevation: 3,                          // Android
+  }}
+/>
+```
+
+### Text rendering
+- **Android font weights:** only `'normal'` and `'bold'` are reliably understood. Numeric weights (`'600'`, `'700'`) often collapse to `'normal'` unless you've loaded a custom font with that exact weight.
+- **iOS font weights:** the full range (`'100'` through `'900'` plus named weights) works natively with the system font.
+- Solution: load custom fonts with specific weights via `expo-font`, name each weight explicitly (`Inter-Regular`, `Inter-SemiBold`, `Inter-Bold`), and use `fontFamily` rather than `fontWeight`.
+- **Line height:** Android adds extra padding above/below text glyphs by default; iOS doesn't. Set `includeFontPadding: false` on Android text for pixel-perfect layout.
+- **Text truncation:** `numberOfLines={1}` + `ellipsizeMode="tail"` — works on both, but Android truncates earlier with multibyte chars.
+
+### Keyboard behavior
+- Built-in `KeyboardAvoidingView` `behavior` prop: iOS wants `'padding'`, Android wants `'height'` — or just use `react-native-keyboard-controller` (recommended, see topic 6) to get identical behavior.
+- **iOS:** keyboard animates in with native timing (usually 250ms ease-out). Hook via keyboard-controller to match.
+- **Android:** keyboard can resize the window OR pan it (app-level `windowSoftInputMode`). Expo managed defaults to `adjustResize`.
+- **Android:** hardware back button closes keyboard first before navigating. iOS has no back button; users dismiss with a tap outside or scroll.
+
+### Back button (Android only)
+- iOS has no hardware/system back button — all back navigation is via swipe-from-edge or header back button.
+- Android back button needs explicit handling for modals, custom navigators, and confirm-before-leave:
+```tsx
+import { BackHandler } from 'react-native'
+useEffect(() => {
+  const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+    if (hasUnsavedChanges) { showConfirmDialog(); return true }  // true = consumed
+    return false  // false = default back behavior
+  })
+  return () => sub.remove()
+}, [hasUnsavedChanges])
+```
+- expo-router handles the common case automatically — only intercept for app-level needs.
+
+### Edge-to-edge (Android 15+, SDK 55)
+**Major change in SDK 55:** Google now enforces edge-to-edge display when targeting Android SDK 35+. The app draws behind the status bar and nav bar by default. No opt-out.
+
+Consequences:
+- `statusBarTranslucent` prop is deprecated and is now a no-op.
+- `backgroundColor` on `<StatusBar>` is deprecated — the status bar is always transparent.
+- `expo-navigation-bar` — most methods are no-ops under edge-to-edge.
+- Your content WILL render behind the system bars unless you use safe areas (see topic 6).
+- **Use `useSafeAreaInsets()` to pad all screens.** If you don't, text and buttons will sit under the status bar on Android.
+- Test with gesture navigation AND 3-button navigation enabled (Settings → System → Gestures). The nav bar is transparent in gesture mode, translucent in 3-button mode.
+
+### Status bar
+- Use `<StatusBar style="auto" />` from `expo-status-bar`. `auto` adapts to the underlying theme.
+- Per-screen: set inside each screen component so it updates on navigation.
+- On Android with edge-to-edge, the status bar is transparent; only the text color (`light`/`dark`) matters now.
+- On iOS, content renders under the status bar; your top padding / nav header handles this.
+
+### Switch / native controls
+- `<Switch>` looks dramatically different per platform (iOS rounded pill; Android Material thumb+track). Intentional.
+- Don't try to match them — use platform-native look. If you need a unified look, build a custom component from scratch.
+- `<Picker>` — same story. Prefer `@react-native-picker/picker` or build a bottom-sheet selector.
+
+### Haptics (expo-haptics)
+- Both platforms support impact (light/medium/heavy), notification (success/warning/error), and selection feedback.
+- iOS: uses Taptic Engine — very crisp. Lean on haptics liberally on iOS.
+- Android: uses vibration motor — less precise. Some devices disable all haptic feedback in battery-saver mode or by user setting. Don't rely on haptics as the only feedback for an action.
+
+### Permissions UX
+- **iOS:** permission prompt is a one-shot modal. If the user denies, the app cannot re-prompt programmatically — must deep-link to Settings.
+- **Android:** can re-prompt up to 2 times (on modern versions). After that, denial becomes permanent until app reinstall.
+- Pattern: show a custom rationale screen BEFORE calling `requestPermission()` so users understand the value ask.
+- On denial, detect `canAskAgain === false` and `Linking.openSettings()`.
+- **iOS:** permission descriptions in `NSCameraUsageDescription` etc. must clearly explain WHY or Apple rejects at review.
+
+### App icons & splash screens (native-only, must be in new build)
+- Configure via `expo-splash-screen` + `ios.icon` / `android.adaptiveIcon` in app.config.ts.
+- Android adaptive icons are required for modern Android: foreground (transparent PNG) + background (solid color or image). Icons without adaptive treatment look broken on Android 8+.
+- iOS: single icon image, multiple sizes auto-generated. Transparent backgrounds are rejected — use solid.
+- Splash screen: `expo-splash-screen` config plugin handles both. Don't hand-craft — use the plugin.
+
+### Fonts
+- Load once at root: `useFonts` hook from `expo-font`.
+- Keep splash visible until fonts load: `await SplashScreen.preventAutoHideAsync()` at module scope, `await SplashScreen.hideAsync()` after fonts ready.
+- **Android:** custom fonts must have their weight baked into the filename/family name. Can't trust `fontWeight: '600'` — use `fontFamily: 'Inter-SemiBold'`.
+
+### Gestures and swipe-back (iOS)
+- iOS: swipe-from-left-edge to pop a screen is the native behavior. Enabled by default in native stack.
+- `fullScreenGestureEnabled: true` on native stack lets users swipe from anywhere, not just the edge.
+- Android has no equivalent — back gesture comes from the system nav, not your stack.
+- Test: if a user can't swipe back on iOS for a routine screen, you're fighting the platform.
+
+### Debugging tools
+- **iOS Simulator:** `I` to hard-reload, shake gesture = `Cmd+Ctrl+Z`, perf monitor via dev menu.
+- **Android Emulator:** `R R` to reload, `Cmd+M` for dev menu.
+- **Real devices:** shake physical device → dev menu.
+- **Flipper** is dead (deprecated); use React Native DevTools (built in) + Chrome DevTools for network.
+
+### Checklist: test on both before merging
+- [ ] Shadows visible on both
+- [ ] Text weights look right on both (Android fonts loaded?)
+- [ ] Keyboard doesn't cover focused input on either
+- [ ] Android back button does the right thing at every screen
+- [ ] Safe-area insets applied (Android edge-to-edge)
+- [ ] App icon looks right (iOS full-bleed, Android adaptive)
+- [ ] Permissions prompt shows the right explanation string (iOS)
+- [ ] Works in gesture nav AND 3-button nav (Android)
+- [ ] Works on oldest supported OS (iOS 15.1, Android 7)
+
