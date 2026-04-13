@@ -122,3 +122,81 @@
 - Haptics on interactions: `expo-haptics` `Haptics.impactAsync(ImpactFeedbackStyle.Light)` on taps, `.selectionAsync()` on picker changes.
 - Respect reduced motion: `AccessibilityInfo.isReduceMotionEnabled()` → skip Reanimated entrance/exit.
 
+## Topic 4: Data fetching & state (TanStack Query on RN)
+
+### Why TanStack Query on RN
+- Same story as web: server state ≠ client state. Don't put server data in useState/Context/Redux.
+- Handles caching, background refetch, stale-while-revalidate, retries, optimistic updates.
+- Same query key factory pattern as web skill.
+
+### Required RN-specific wiring
+RN has no `window`, no `focus`/`blur`/`online` events. You MUST manually wire these or refetch-on-focus and refetch-on-reconnect silently do nothing.
+
+```tsx
+// App.tsx (or root _layout.tsx)
+import * as Network from 'expo-network'
+import { AppState, Platform } from 'react-native'
+import { focusManager, onlineManager } from '@tanstack/react-query'
+
+// Online detection (Expo Network API)
+onlineManager.setEventListener(setOnline => {
+  const sub = Network.addNetworkStateListener(state => setOnline(!!state.isConnected))
+  Network.getNetworkStateAsync().then(s => setOnline(!!s.isConnected))
+  return sub.remove
+})
+
+// Focus detection (AppState instead of window.focus)
+AppState.addEventListener('change', status => {
+  if (Platform.OS !== 'web') focusManager.setFocused(status === 'active')
+})
+```
+
+### Screen focus refetch
+- expo-router / React Navigation provide `useFocusEffect` — fires when a screen becomes focused (not just mount).
+- Pattern: call `query.refetch()` inside `useFocusEffect`; guard first-mount with a ref to avoid double fetch.
+- Alternative: `useQuery({ ..., subscribed: isFocused })` using `useIsFocused()` — unsubscribes off-screen to save work.
+
+### Recommended QueryClient defaults for RN
+```tsx
+new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,           // 1 min default — mobile users switch apps often
+      gcTime: 5 * 60_000,
+      retry: 2,                     // mobile flakiness → retry a bit
+      refetchOnReconnect: true,    // needs onlineManager wired
+      refetchOnWindowFocus: true,  // needs focusManager wired
+    },
+    mutations: { retry: 0 },
+  },
+})
+```
+
+### Offline-first persistence
+- `@tanstack/query-async-storage-persister` + `PersistQueryClientProvider`.
+- Storage: `@react-native-async-storage/async-storage` for normal cached data (unencrypted).
+- NEVER persist tokens via AsyncStorage — use `expo-secure-store` (Keychain/Keystore).
+- Mutation persistence can queue offline mutations and replay on reconnect; call out as advanced.
+
+### Query key factory (same as web skill)
+```tsx
+export const queryKeys = {
+  me: ['me'] as const,
+  posts: {
+    all: ['posts'] as const,
+    list: (filter?: string) => ['posts', { filter }] as const,
+    detail: (id: string) => ['post', id] as const,
+  },
+} as const
+```
+
+### Devtools
+- `tanstack-query-dev-tools-expo-plugin` — devtools overlay on device. Worth mentioning.
+
+### Gotchas
+- Module-scope `new QueryClient()` works fine on RN (no SSR). Still prefer `useState(() => new QueryClient())` for hot-reload safety.
+- `refetchOnWindowFocus` does nothing without AppState wiring — easy to miss.
+- `refetchOnReconnect` does nothing without onlineManager wiring.
+- `window.location` / `navigator.onLine` don't exist on native.
+- Don't put server data in Zustand/Redux/Context — let React Query own it.
+
