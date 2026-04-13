@@ -634,3 +634,161 @@ Reference from `jest.setup` in package.json: `"setupFilesAfterEach": ["<rootDir>
 - Aim for high coverage on services and screen integration tests, not line coverage for its own sake.
 - Every screen should have at least: happy path, loading state, error state, one key interaction.
 
+## Topic 9: Release pipeline (EAS Build, Submit, Update)
+
+### The three services
+- **EAS Build** — cloud-hosted builder. Takes your JS/config, produces .ipa (iOS) / .apk or .aab (Android).
+- **EAS Submit** — uploads built binaries to App Store Connect (iOS) and Google Play Console (Android).
+- **EAS Update** — serves JS/asset OTA updates to shipped apps. Bypasses store review for non-native changes.
+
+All three configured via `eas.json` at repo root.
+
+### Mental model: two layers
+Every binary has two layers:
+1. **Native layer** — compiled code, permissions, native modules. Baked into the .ipa/.aab. Only changeable by shipping a new binary.
+2. **JS/asset layer** — your React code, images, translations. Swappable via EAS Update.
+
+The **runtime version** is the contract between them. An update can only run on a build with a matching runtime version.
+
+### Build profiles (eas.json)
+Three standard profiles:
+
+```json
+{
+  "cli": { "version": ">= 15.0.0" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": { "EXPO_PUBLIC_API_URL": "https://staging.api.com" }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": { "EXPO_PUBLIC_API_URL": "https://api.com" }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": { "appleId": "...", "ascAppId": "..." },
+      "android": { "serviceAccountKeyPath": "./google-service-account.json", "track": "internal" }
+    }
+  }
+}
+```
+
+Profile purposes:
+- **development** — installs expo-dev-client (dev menu, Metro connection, debugging). Internal distribution. `ios.simulator: true` lets you run on the sim.
+- **preview** — production-like build without dev tools. Internal distribution (TestFlight internal / Play internal track). Use for team QA.
+- **staging** (optional) — extends `preview`, points at staging API.
+- **production** — store-bound build. `autoIncrement: true` bumps buildNumber (iOS) / versionCode (Android) automatically.
+
+Extend profiles with `"extends": "production"` to avoid duplication.
+
+### Env vars in EAS
+- `env` field in profile — sets `EXPO_PUBLIC_*` at build time for that profile.
+- Secrets (never exposed to JS bundle): `eas secret:create` stores on EAS servers, referenced by name in eas.json or read at build time.
+- NEVER put API secrets in `EXPO_PUBLIC_*` — they end up in the bundle and are trivially extractable.
+
+### Runtime version policy (critical decision)
+Set in app.config.ts:
+```ts
+export default {
+  runtimeVersion: { policy: 'fingerprint' },  // RECOMMENDED for prod
+  updates: { url: 'https://u.expo.dev/your-project-id' },
+}
+```
+
+Policies:
+- **`fingerprint`** (RECOMMENDED) — `@expo/fingerprint` hashes every file that could affect native (package.json, plugins, app.config.ts, native folders). Changes → new runtime version → new build required. Deterministic. Safest.
+- **`appVersion`** — bumps on app.config.ts `version` change. Simple but error-prone: you can change a native dep without bumping version → OTA ships broken update to old binary.
+- **`sdkVersion`** — only bumps on SDK upgrade. Too loose for most apps.
+- **Explicit string** (`"1.0.0"`) — full manual control. Only if you have a strong reason.
+
+**Use fingerprint. Everything else leaks bugs to production.**
+
+### What CAN ship via OTA (EAS Update)
+- JS code changes (components, hooks, logic)
+- Copy, translations, styling tweaks
+- Image assets (bundled)
+- Bug fixes in non-native code
+- Feature flags toggling JS paths
+
+### What CANNOT ship via OTA (requires new build)
+- Any new native dependency (new `expo-*` module, react-native-* with native code)
+- Permission changes (adding camera, location)
+- App icon / splash screen
+- Bundle identifier / app name
+- Expo SDK upgrade
+- Config plugin additions
+- `app.config.ts` native fields
+
+**Rule of thumb: if fingerprint changes, it's not OTA-able.** That's why fingerprint policy is the right choice — it's self-enforcing.
+
+### Channels and branches
+- **Branch** = a linear history of updates (like a git branch).
+- **Channel** = a pointer from a build to a branch. Builds subscribe to a channel; you publish updates to a branch; a channel decides which branch a build listens to.
+- Standard: one channel per environment (`production`, `preview`, `staging`).
+- `eas update --branch production --message "fix login crash"` — publishes.
+- Advanced: rollouts — `eas channel:edit production --branch rollout-v1.2.3` with percentage gating.
+
+### Versioning strategy (app store compliance)
+App stores care about two fields:
+- **iOS:** `CFBundleShortVersionString` (marketing version, e.g., `1.2.3`) + `CFBundleVersion` (build number, monotonic integer).
+- **Android:** `versionName` (marketing) + `versionCode` (monotonic integer).
+
+In app.config.ts:
+```ts
+export default {
+  version: '1.2.3',                        // marketing version (both stores)
+  ios: { buildNumber: '1' },                // auto-incremented by EAS
+  android: { versionCode: 1 },              // auto-incremented by EAS
+}
+```
+
+With `autoIncrement: true` in the production profile, EAS bumps the build number server-side on each build. Commit it back to eas.json via `eas build:version:set` if you want it tracked in git, or let EAS own it (simpler).
+
+### Credentials
+- **iOS:** Apple Developer account required. EAS can generate distribution certs + provisioning profiles automatically — the default and recommended path. You provide Apple ID + app-specific password, EAS handles the rest.
+- **Android:** EAS generates a keystore on first build. **Back up the keystore** (`eas credentials` → download) — losing it means you can never update your app on Play Store, even after losing publishing rights.
+- **Play Store service account:** create a service account in Google Cloud Console, grant it "Release Manager" role in Play Console, download the JSON key, reference in eas.json `submit.production.android.serviceAccountKeyPath`.
+
+### Typical release flow
+```
+1. Feature PR merges to main
+2. Dev builds locally, tests in dev client
+3. Cut a preview build: `eas build --profile preview --platform all`
+4. Install via internal distribution link → team QA
+5. If clean: `eas build --profile production --platform all --auto-submit`
+6. EAS Submit pushes to TestFlight (iOS) and Play Internal track (Android)
+7. Promote through test tracks → production in App Store Connect / Play Console
+8. Hotfixes: `eas update --branch production --message "fix X"` (if JS-only)
+9. Real native fix: new production build cycle
+```
+
+### Automation (EAS Workflows)
+- `.eas/workflows/*.yml` — GitHub Actions-like syntax, runs on EAS servers.
+- Example jobs: build-on-tag, submit-after-build, update-on-main-push.
+- Cheaper alternative: use GitHub Actions with the `expo/expo-github-action` to trigger `eas build`.
+
+### Rollback strategy
+- OTA rollback: `eas update --branch production --republish --group <old-group-id>` — re-publishes a previous update group, pushing it to all clients.
+- Binary rollback: cannot truly roll back a store release. Must push a new build with the old code (version bumped). Use staged rollouts (Play Console) to catch issues before 100% distribution.
+
+### Store review gotchas
+- **iOS:** App Store Review Guideline 4.3 — don't ship "spam" duplicate apps. 2.5.2 — no downloading executable code post-approval (EAS Update JS is explicitly allowed; WebViews loading remote HTML are borderline).
+- **iOS:** must have real functionality at review time. No "coming soon" screens.
+- **Android:** Data Safety form (Play Console) — must declare all data collected. False declarations = removal.
+- **Both:** privacy policy URL required. Set in app.config.ts and store listing.
+- **iOS:** expect 24–48 hour review on first submission, faster on updates. Use TestFlight for internal testing to avoid review cycles.
+
+### Observability post-release
+- **expo-application + expo-updates** to read current `updateId` and `runtimeVersion` — log with every error.
+- **Sentry (sentry-expo)** — source-mapped crash reporting. Uploads maps per build via EAS Build hook.
+- **Critical:** tag errors with `updateId` so you know exactly which OTA caused a spike.
+
