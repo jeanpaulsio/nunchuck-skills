@@ -303,3 +303,99 @@ Notifications.setNotificationHandler({
 - [ ] Notification channel set on Android before token fetch
 - [ ] Dev build used for notifications (not Expo Go)
 
+## Topic 6: Styling (NativeWind) + safe areas + keyboard
+
+### NativeWind v4/v5 setup with Expo SDK 55
+Files touched:
+1. `metro.config.js` — wrap config with `withNativewind`
+2. `babel.config.js` — preset already handles NativeWind in expo template
+3. `tailwind.config.js` — standard Tailwind config with `content: ['./app/**/*.{ts,tsx}']`
+4. `global.css` — imports Tailwind layers + nativewind theme
+5. `nativewind-env.d.ts` — types
+6. Import `global.css` at top-level component (root `_layout.tsx`), NOT at the `AppRegistry.registerComponent` entry
+7. Pin `lightningcss@1.30.1` in package.json `overrides` — newer versions cause deserialization errors
+
+```js
+// metro.config.js
+const { getDefaultConfig } = require('expo/metro-config')
+const { withNativewind } = require('nativewind/metro')
+
+const config = getDefaultConfig(__dirname)
+module.exports = withNativewind(config, { input: './global.css' })
+```
+
+### Using classes
+```tsx
+<View className="flex-1 bg-white dark:bg-neutral-900">
+  <Text className="text-lg font-semibold text-neutral-900 dark:text-white">Hello</Text>
+</View>
+```
+- Use `className` on any RN primitive.
+- `dark:` prefix works out of the box.
+- No native platform variants (`ios:`/`android:`) — use `Platform.select()` or conditional classes.
+
+### Dark mode
+- Set `userInterfaceStyle: 'automatic'` in app.config.ts — enables Expo to follow system appearance.
+- Read: `const { colorScheme } = useColorScheme()` from `nativewind`.
+- Set manually: `colorScheme.set('dark' | 'light' | 'system')`.
+- Persist user choice with AsyncStorage, hydrate on launch.
+- Always offer a "System" option if showing a manual toggle.
+
+### Safe areas
+Don't trust `vh`/`100%` — iPhone notches, dynamic islands, Android navigation bars all eat into the viewport.
+
+```tsx
+// Root _layout.tsx — wrap ONCE at the root
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
+<SafeAreaProvider initialMetrics={initialWindowMetrics}>{children}</SafeAreaProvider>
+```
+`initialMetrics` avoids a 1-frame layout jump on first render.
+
+### Hook vs component
+- **Prefer `useSafeAreaInsets()`** over `<SafeAreaView>`. Mixing the two causes flickering because they update on different timing.
+- Apply insets selectively — usually only `top` (for screens without a header) and `bottom` (for screens with fixed CTAs).
+- Don't wrap the whole app in a single SafeAreaView. Apply per-screen.
+
+```tsx
+function Screen() {
+  const insets = useSafeAreaInsets()
+  return (
+    <View style={{ paddingTop: insets.top, paddingBottom: insets.bottom }} className="flex-1">
+      {content}
+    </View>
+  )
+}
+```
+
+### When NOT to apply insets
+- Screens inside expo-router's native `<Stack>` with a visible header → the header already handles the top inset.
+- Screens inside `<Tabs>` → the tab bar handles the bottom inset.
+- Rule: apply insets at the OUTERMOST container, and only for edges not already handled by a navigator.
+
+### Keyboard handling
+**Use `react-native-keyboard-controller`, not RN's built-in `KeyboardAvoidingView`.**
+- Built-in KAV: platform-specific behavior, janky animations, poor on Android, hard to customize.
+- keyboard-controller: identical behavior on iOS and Android, animated in sync with native keyboard, better API, better perf.
+- Available in Expo Go since SDK 54 (Nov 2024).
+
+```tsx
+// root _layout.tsx
+import { KeyboardProvider } from 'react-native-keyboard-controller'
+<KeyboardProvider>{children}</KeyboardProvider>
+```
+
+Components:
+- `<KeyboardAvoidingView>` from keyboard-controller (not RN).
+- `<KeyboardAwareScrollView>` — scroll form into view when input focused.
+- `<KeyboardToolbar>` — iOS-style Next/Previous/Done bar above the keyboard for field traversal.
+- `useReanimatedKeyboardAnimation()` → returns shared values for height/progress; drive your own Reanimated styles in sync with native keyboard timing.
+
+### Status bar
+- Use `<StatusBar style="auto" />` from `expo-status-bar` (auto adapts to color scheme).
+- For per-screen style: set inside each screen component so it updates on navigation.
+- On Android, `translucent` (default on expo-router) lets content render behind the status bar — plan your safe-area insets accordingly.
+
+### dvh / vh equivalents
+- RN doesn't have `vh`/`dvh` — use `Dimensions.get('window')` or `useWindowDimensions()`.
+- `useWindowDimensions()` auto-updates on rotation / fold / split-screen; prefer it over `Dimensions.get()`.
+
