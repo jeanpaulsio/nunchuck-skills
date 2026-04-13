@@ -399,3 +399,94 @@ Components:
 - RN doesn't have `vh`/`dvh` — use `Dimensions.get('window')` or `useWindowDimensions()`.
 - `useWindowDimensions()` auto-updates on rotation / fold / split-screen; prefer it over `Dimensions.get()`.
 
+## Topic 7: Performance
+
+### New Architecture (SDK 55)
+- Legacy Architecture is DROPPED. Everything runs on New Arch (Fabric + TurboModules).
+- Synchronous layout measurements replace async bridge — enables FlashList v2 to render without size estimates.
+- Hermes is the default JS engine. Hermes V1 is experimental in SDK 55 (via `useHermesV1` in expo-build-properties) but requires building RN from source — wait for stable release.
+
+### Lists: ALWAYS use FlashList (v2) over FlatList
+FlashList v2 is a ground-up rewrite for New Architecture:
+- **No more `estimatedItemSize`** — synchronous layout measurement handles it.
+- **No more `overrideItemLayout`** — gone in v2.
+- Drop-in replacement for FlatList API in most cases.
+
+```tsx
+import { FlashList } from '@shopify/flash-list'
+
+<FlashList
+  data={items}
+  renderItem={({ item }) => <PostCard post={item} />}
+  keyExtractor={item => item.id}  // still required and important
+/>
+```
+
+### FlashList best practices
+- **`keyExtractor` is required.** Prevents glitches when items re-layout while scrolling upward.
+- **Memoize `renderItem`** with `useCallback`, or extract to a stable reference. Inline closures cause re-renders of every row on state change.
+- **Memoize row components** with `React.memo`. FlashList recycles rows aggressively — unmemoized rows re-render every recycle.
+- **Remove explicit `key` props** from children inside `renderItem` — can conflict with FlashList's recycling.
+- **Nested lists:** horizontal-in-vertical requires BOTH to be FlashList for optimal layout timing.
+- **New Architecture only** — v2 will not run on legacy arch. Fine for SDK 55.
+
+### FlashList item patterns
+```tsx
+// BAD: inline closure, new function every render
+<FlashList renderItem={({ item }) => <Row item={item} onPress={() => handle(item.id)} />} />
+
+// GOOD: stable reference, memoized row
+const Row = React.memo(function Row({ item, onPress }: Props) { ... })
+const renderItem = useCallback(
+  ({ item }: { item: Post }) => <Row item={item} onPress={handlePress} />,
+  [handlePress],
+)
+```
+
+### Images: always use `expo-image`, never RN's `<Image>`
+Why:
+- Native backing: SDWebImage (iOS), Glide (Android) — battle-tested, fast, memory-efficient.
+- Disk + memory caching with configurable policies.
+- Blurhash/thumbhash placeholders (compact base64-ish representations).
+- Smooth transitions on source change (no flicker).
+- WebP/AVIF/SVG/HEIC support.
+- Prefetching: `Image.prefetch(url)`.
+
+```tsx
+import { Image } from 'expo-image'
+
+<Image
+  source={{ uri: post.image_url }}
+  placeholder={{ blurhash: post.image_blurhash }}
+  contentFit="cover"
+  transition={200}
+  cachePolicy="memory-disk"
+  recyclingKey={post.id}  // CRITICAL in FlashList — resets content before new image loads
+/>
+```
+
+### Image gotchas
+- `useImage` hook without `maxWidth`/`maxHeight` can crash from OOM on large images.
+- `placeholderContentFit` should match `contentFit` to avoid scale jump between placeholder and final image.
+- In FlashList rows, ALWAYS set `recyclingKey` — otherwise recycled rows briefly show the previous item's image.
+
+### Re-render hygiene
+- **React Compiler** is not yet default in SDK 55; manual memoization still matters.
+- Use `React.memo` on list row components.
+- Use `useCallback`/`useMemo` for props passed to memoized children and for FlashList `renderItem`.
+- **Context re-render trap:** any consumer of a context re-renders when ANY field in the context value changes. Split contexts by update frequency (e.g., theme context vs. auth context vs. user-settings context) instead of one giant AppContext.
+- For Reanimated animations, DON'T put animation values in React state — use `useSharedValue` so updates bypass React reconciliation entirely.
+
+### Bundle size & startup
+- Hermes bytecode is precompiled — faster startup than V8.
+- SDK 55 adds 75% smaller OTA updates via Hermes bytecode diffing. No code change required, just use EAS Update.
+- Code splitting: expo-router handles route-based lazy loading automatically.
+- Import specific functions: `import debounce from 'lodash/debounce'` not `import _ from 'lodash'`.
+- Inspect bundle with `npx expo export --dump-sourcemap` + `source-map-explorer`.
+
+### Profile on real devices
+- iOS Simulator and Android Emulator are NOT representative of perf on low-end devices.
+- Test on: older iPhone SE / low-tier Android (Moto G, Samsung A-series).
+- Use React DevTools Profiler to find slow renders.
+- Use Flipper or React Native Performance Monitor (`Cmd+M` / shake → "Show Perf Monitor") for FPS and RAM.
+
