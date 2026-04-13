@@ -490,3 +490,147 @@ import { Image } from 'expo-image'
 - Use React DevTools Profiler to find slow renders.
 - Use Flipper or React Native Performance Monitor (`Cmd+M` / shake → "Show Perf Monitor") for FPS and RAM.
 
+## Topic 8: Testing (unit + integration)
+
+### Stack
+- **jest-expo** — preset, installs Jest + all needed transforms.
+- **@testing-library/react-native (RNTL)** — component queries and events.
+- **expo-router/testing-library** — renderRouter, route assertions.
+- **@testing-library/jest-native** — extra matchers (deprecated in RNTL v12+; RNTL has built-ins now).
+
+NO `react-test-renderer` — deprecated, doesn't support React 19. Always use RNTL.
+
+### Setup
+```bash
+npx expo install jest jest-expo @testing-library/react-native @types/jest --dev
+```
+
+`package.json`:
+```json
+{
+  "scripts": { "test": "jest", "test:watch": "jest --watchAll" },
+  "jest": {
+    "preset": "jest-expo",
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@shopify/flash-list|nativewind|react-native-css-interop))"
+    ]
+  }
+}
+```
+The `transformIgnorePatterns` list is the #1 source of "SyntaxError: Unexpected token export" errors. Add new libs here when you see them.
+
+### jest-expo auto-mocks
+- The preset auto-mocks the "native part" of Expo SDK modules — SecureStore, Notifications, Camera, etc. all return stubs by default.
+- You don't need to mock `expo-*` modules manually unless you need specific return values.
+- Override behavior per-test: `(SecureStore.getItemAsync as jest.Mock).mockResolvedValue('token')`.
+
+### React Native Testing Library basics
+```tsx
+import { render, screen, userEvent } from '@testing-library/react-native'
+
+test('submits form', async () => {
+  const user = userEvent.setup()
+  render(<LoginScreen />)
+
+  await user.type(screen.getByPlaceholderText('Email'), 'jp@test.com')
+  await user.type(screen.getByPlaceholderText('Password'), 'secret')
+  await user.press(screen.getByRole('button', { name: /sign in/i }))
+
+  expect(await screen.findByText('Welcome')).toBeOnTheScreen()
+})
+```
+
+### `userEvent` vs `fireEvent` — prefer userEvent
+- `fireEvent.press()` only calls the `onPress` prop — no press-in/press-out, no state transitions.
+- `userEvent.press()` simulates the full native press sequence (begin → end → onPress) — catches more bugs.
+- `userEvent.type()` simulates real keystrokes, triggers `onChangeText` per character.
+- Always `await` userEvent calls — they're async.
+- Always call `userEvent.setup()` at the start of each test.
+
+### Queries: priority order
+1. `getByRole('button', { name: /save/i })` — accessibility-first
+2. `getByLabelText('Email')` — form inputs
+3. `getByPlaceholderText(...)` — fallback for inputs without labels
+4. `getByText(...)` — for visible text
+5. `getByDisplayValue(...)` — for inputs with existing values
+6. `getByTestId(...)` — LAST resort, only when nothing else works
+
+### Testing expo-router navigation
+```tsx
+import { renderRouter, screen } from 'expo-router/testing-library'
+
+test('navigates to detail on tap', async () => {
+  const user = userEvent.setup()
+  renderRouter(
+    { index: HomeScreen, 'posts/[id]': PostScreen },
+    { initialUrl: '/' },
+  )
+
+  await user.press(screen.getByText('Post 1'))
+  expect(screen).toHavePathname('/posts/1')
+})
+```
+
+Matchers on `expect(screen)`:
+- `toHavePathname('/posts/1')`
+- `toHavePathnameWithParams('/posts/1?ref=home')`
+- `toHaveSegments(['posts', '[id]'])`
+- `toHaveRouterState({...})`
+
+### Mocking router hooks (when NOT using renderRouter)
+```tsx
+const mockPush = jest.fn()
+jest.mock('expo-router', () => ({
+  ...jest.requireActual('expo-router'),
+  useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn() }),
+  useLocalSearchParams: () => ({ id: 'post-123' }),
+}))
+```
+
+### TanStack Query in tests
+```tsx
+function renderWithQuery(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+}
+```
+- `retry: false` — otherwise a failing test waits for 3 retries before finishing.
+- Mock service functions with `jest.fn()` wrappers (same pattern as web skill).
+
+### Mocking native modules in test setup
+`jest-setup.ts`:
+```ts
+// Silence known noisy warnings from Reanimated in tests
+require('react-native-reanimated').setUpTests()
+
+// Mock expo-haptics (no-op is fine)
+jest.mock('expo-haptics', () => ({
+  impactAsync: jest.fn(),
+  notificationAsync: jest.fn(),
+  selectionAsync: jest.fn(),
+}))
+```
+Reference from `jest.setup` in package.json: `"setupFilesAfterEach": ["<rootDir>/jest-setup.ts"]`.
+
+### Common test gotchas
+- **Reanimated components:** must import `react-native-reanimated/mock` OR call `require('react-native-reanimated').setUpTests()` in setup, otherwise tests crash.
+- **Gesture handler:** similar — import `'react-native-gesture-handler/jestSetup'` in setup file.
+- **FlashList** renders items async. Use `findBy*` queries, not `getBy*`, for items.
+- **Haptics, notifications, secure-store:** auto-mocked by jest-expo, return undefined. Fine for most tests.
+- **Async waits:** use `findBy*` or `waitFor(() => expect(...).toPass())`, not arbitrary timers.
+- **`act()` warnings:** usually mean you forgot `await` on a state-updating call. Add the await.
+- **`tsc --noEmit` on tests:** Jest doesn't type-check. Run tsc separately in CI to catch test type errors.
+- **Module scope mocks:** `jest.mock` is hoisted, but the factory still runs at import. If the factory references uninitialized vars, use `jest.doMock` with explicit `require()`.
+
+### What to test
+- **Unit:** pure utilities, hooks (via `renderHook`), reducers, Zod schemas.
+- **Integration:** full screen renders with mocked API — the layer we get most value from.
+- **Skip:** snapshot tests (brittle, high-maintenance), exact style matchers, implementation details.
+- **Don't bother E2E** in v1 (per user decision).
+
+### Coverage targets
+- Aim for high coverage on services and screen integration tests, not line coverage for its own sake.
+- Every screen should have at least: happy path, loading state, error state, one key interaction.
+
