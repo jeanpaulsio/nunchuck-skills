@@ -15,6 +15,7 @@ nunchuck-skills/
 │   ├── gimme-ur-tots.md             # /gimme-ur-tots - execute an approved plan end-to-end
 │   ├── python-review.md             # /python-review
 │   ├── react-review.md              # /react-review
+│   ├── react-native-review.md       # /react-native-review
 │   ├── rails-review.md              # /rails-review
 │   ├── data-review.md               # /data-review - schema + query review
 │   ├── security-review.md           # /security-review - deep security audit
@@ -26,6 +27,7 @@ nunchuck-skills/
 │   ├── codebase-assessor.md         # Stack, schema, test, churn analysis
 │   ├── python-reviewer.md           # Python/FastAPI/SQLAlchemy review
 │   ├── react-typescript-reviewer.md # React/TypeScript/Vike review
+│   ├── react-native-reviewer.md     # React Native / Expo review
 │   ├── rails-reviewer.md            # Ruby on Rails 8 review
 │   ├── database-reviewer.md         # PostgreSQL schema + query review
 │   └── security-reviewer.md         # Deep security audit (app code + Claude config)
@@ -37,6 +39,8 @@ nunchuck-skills/
 │   │   └── SKILL.md                 # FastAPI + SQLAlchemy + Pydantic patterns
 │   ├── react-typescript-patterns/
 │   │   └── SKILL.md                 # React 19 + Vike + TanStack Query patterns
+│   ├── react-native-expo-patterns/
+│   │   └── SKILL.md                 # Expo Router + TanStack Query + EAS patterns
 │   ├── rails-patterns/
 │   │   └── SKILL.md                 # Rails 8 + Hotwire + Solid Queue patterns
 │   └── database-patterns/
@@ -50,6 +54,7 @@ nunchuck-skills/
 └── checklists/                      # Pre-commit checklists
     ├── python-fastapi.md
     ├── typescript-react.md
+    ├── react-native-expo.md
     └── ruby-rails.md
 ```
 
@@ -204,15 +209,16 @@ Claude: Looked at last 10 PRs. Findings:
 ### The Commands
 
 ```
-/plan              think before you build
-/gimme-ur-tots     execute an approved plan end-to-end
-/python-review     review Python/FastAPI code
-/react-review      review React/TypeScript code
-/rails-review      review Ruby on Rails code
-/data-review       review schema and queries
-/security-review   deep security audit before launch
-/scout             scout a new or unfamiliar codebase
-/audit             codebase health check (daily/weekly/monthly)
+/plan                  think before you build
+/gimme-ur-tots         execute an approved plan end-to-end
+/python-review         review Python/FastAPI code
+/react-review          review React/TypeScript code
+/react-native-review   review React Native / Expo code
+/rails-review          review Ruby on Rails code
+/data-review           review schema and queries
+/security-review       deep security audit before launch
+/scout                 scout a new or unfamiliar codebase
+/audit                 codebase health check (daily/weekly/monthly)
 ```
 
 ## Gimme Ur Tots
@@ -241,6 +247,7 @@ When implementation is complete, detects which stacks were touched and runs the 
 
 - Python/FastAPI changed → `/python-review`
 - React/TypeScript changed → `/react-review`
+- React Native / Expo changed → `/react-native-review`
 - Rails changed → `/rails-review`
 - Schema or queries changed → `/data-review`
 
@@ -252,10 +259,11 @@ Final output is a QA plan: what to manually verify, in what order, and what edge
 
 ## Stack Support
 
-All three stacks included. Whatever you want, gosh.
+All four stacks included. Whatever you want, gosh.
 
 - **Python / FastAPI / SQLAlchemy** - patterns, reviewer agent, checklist
 - **TypeScript / React / Vike** - patterns, reviewer agent, checklist
+- **React Native / Expo** - patterns, reviewer agent, checklist
 - **Ruby on Rails 8** - patterns, reviewer agent, checklist
 - **PostgreSQL** - database patterns and reviewer (cross-stack)
 
