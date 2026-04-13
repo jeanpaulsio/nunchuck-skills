@@ -200,3 +200,106 @@ export const queryKeys = {
 - `window.location` / `navigator.onLine` don't exist on native.
 - Don't put server data in Zustand/Redux/Context — let React Query own it.
 
+## Topic 5: Native capabilities via Expo modules
+
+### General permissions pattern
+- Permissions are TWO layers: (1) declare in app.config.ts, (2) request at runtime.
+- **iOS:** must add usage strings to `ios.infoPlist` (e.g., `NSCameraUsageDescription`). Missing = app store rejection + crash.
+- **Android:** declare in `android.permissions` array. Block unwanted with `android.blockedPermissions`.
+- Changes to native permissions require a new build — OTA updates cannot change them.
+- Prefer library-specific config plugin props (e.g., `expo-camera` plugin's `cameraPermission`) over hand-editing infoPlist — clearer intent, less duplication.
+
+### Runtime request pattern: `usePermissions` hook
+Every Expo module with permissions exposes a `usePermissions()` hook:
+```tsx
+import { useCameraPermissions } from 'expo-camera'
+
+function Screen() {
+  const [permission, requestPermission] = useCameraPermissions()
+
+  if (!permission) return <LoadingState />          // still loading
+  if (!permission.granted) {
+    return (
+      <View>
+        <Text>Camera access needed</Text>
+        <Button onPress={requestPermission} title="Grant" />
+      </View>
+    )
+  }
+  return <Camera />
+}
+```
+
+### Testing rejection scenarios
+- Once a user denies, the OS blocks further prompts. You must uninstall/reinstall to test the "first time" flow again.
+- For persistent denial, detect `permission.canAskAgain === false` and deep-link to settings with `Linking.openSettings()`.
+
+### expo-secure-store (for tokens/secrets)
+```tsx
+import * as SecureStore from 'expo-secure-store'
+
+await SecureStore.setItemAsync('access_token', token)
+const token = await SecureStore.getItemAsync('access_token')
+await SecureStore.deleteItemAsync('access_token')
+```
+- Backing: iOS Keychain, Android Keystore-encrypted SharedPreferences.
+- Size limit: ~2KB (iOS Keychain historically rejects >2048 bytes). DON'T store JWTs with massive claims or encoded images.
+- Always use async API. Sync blocks the JS thread.
+- `keychainAccessible` option controls when value is readable (e.g., `WHEN_UNLOCKED`, `AFTER_FIRST_UNLOCK`).
+- `requireAuthentication: true` → biometric gate on read. Warning: key becomes inaccessible if user changes biometric enrollment.
+- Don't assume iOS persistence across uninstall — not guaranteed even though Keychain technically can.
+
+### AsyncStorage vs SecureStore decision
+| Use case | Storage |
+|----------|---------|
+| Auth tokens, API keys, user PII | `expo-secure-store` |
+| User preferences, cached server data, theme choice | `@react-native-async-storage/async-storage` |
+| Large files, downloaded media | `expo-file-system` |
+
+### expo-notifications
+```tsx
+// Set handler EARLY (root _layout.tsx module scope)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true, shouldShowList: true,
+    shouldPlaySound: true, shouldSetBadge: true,
+  }),
+})
+```
+- Get push token: `Notifications.getExpoPushTokenAsync({ projectId })` — requires EAS project ID.
+- Android 13+: explicit POST_NOTIFICATIONS permission prompt required (handled by `requestPermissionsAsync()`).
+- Android: MUST call `setNotificationChannelAsync()` before requesting token. Channel-less notifications silently fail on API 26+.
+- iOS: use `response.ios.status` field, not root `status`, for nuanced permission states (PROVISIONAL, EPHEMERAL).
+- iOS: repeating time-interval triggers must be ≥60s or they don't fire.
+- **Push notifications unavailable in Expo Go on Android from SDK 53+.** MUST use a dev build. Local notifications still work in Expo Go.
+- Two listeners: `addNotificationReceivedListener` (fired while foregrounded) and `addNotificationResponseReceivedListener` (fired on tap, including from killed state).
+
+### expo-camera
+- Use `<CameraView />` (the modern API; deprecated `<Camera />` is gone).
+- Permissions via `useCameraPermissions` hook.
+- Don't mount multiple `<CameraView />` at once — Android has a single-session constraint.
+
+### expo-image-picker
+- Call `requestMediaLibraryPermissionsAsync()` BEFORE `launchImageLibraryAsync()`, otherwise the OS prompt appears mid-interaction and feels janky.
+- `allowsEditing: true` gives users in-flow crop on both platforms.
+- Android: if activity is killed while picker is open, use `getPendingResultAsync()` on resume to recover the selection. Test with "Don't keep activities" enabled.
+- iOS HEIC: pickers return HEIC by default; set `mediaTypes` and handle conversion if uploading to a backend that expects JPEG.
+
+### expo-file-system
+- Modern SDK 55 API is object-based: `new File(uri)`, `new Directory(uri)` — replaces the old function-based API.
+- `copyToCacheDirectory: true` on document picker is required for safe access — the source URI may be ephemeral.
+- Use `Paths.cache` for temporary files (can be purged by OS), `Paths.document` for persistent user data.
+
+### expo-location
+- Permissions split: `foreground` and `background` are separate. Requesting background requires foreground first.
+- Background location on iOS requires `UIBackgroundModes: ['location']` in infoPlist AND a justification for app store review.
+- Managed workflow supports background location, but understand the review implications before committing.
+
+### Managed-workflow friendly checklist
+- [ ] Config plugins used (not manual ios/android dir edits)
+- [ ] Permission usage strings set in app.config.ts
+- [ ] `usePermissions()` hooks used for runtime checks
+- [ ] SecureStore for tokens, AsyncStorage for preferences, FileSystem for blobs
+- [ ] Notification channel set on Android before token fetch
+- [ ] Dev build used for notifications (not Expo Go)
+
