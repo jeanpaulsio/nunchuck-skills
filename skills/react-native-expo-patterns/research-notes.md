@@ -920,3 +920,159 @@ Consequences:
 - [ ] Works in gesture nav AND 3-button nav (Android)
 - [ ] Works on oldest supported OS (iOS 15.1, Android 7)
 
+## Topic 11: Anti-patterns synthesis
+
+Distilled from topics 1-10 plus common production mistakes. These are the things that silently cost hours or ship bugs.
+
+### Treating RN like the web
+**The mistake:** Using web patterns in RN — `map()` for long lists, CSS `vh` units, `window.location`, `localStorage` for auth, `<div onClick>`, assuming DOM exists.
+
+**Cost:** Broken behavior at runtime, performance cliffs on long lists, lost auth state on app restart.
+
+**Fix:** RN is not the DOM.
+- Long lists → FlashList, never `.map()`.
+- No `vh`/`dvh` → `useWindowDimensions()`.
+- No `window.location` → `Linking.openURL()`, `router.push()`.
+- Auth tokens → `expo-secure-store`, never `AsyncStorage`.
+- No click events — `Pressable`, `TouchableOpacity`, or `<Button>` (though the built-in Button is basically unusable, write your own).
+
+### Pretending iOS and Android behave the same
+**The mistake:** Building for one platform, assuming the other "just works." Not testing on both until right before release.
+
+**Cost:** Shadow missing on Android (no `elevation`), fonts rendering wrong weight on Android, content sitting under the status bar on Android edge-to-edge, hardware back button doing the wrong thing.
+
+**Fix:** Test on both simulators during active development, not at the end. Build a per-PR smoke test: render the changed screen on both iOS and Android before merging.
+
+### Skipping the RN-specific wiring for TanStack Query
+**The mistake:** Using the defaults from web docs — `refetchOnWindowFocus: true`, `refetchOnReconnect: true` — without wiring `focusManager` to AppState and `onlineManager` to Network.
+
+**Cost:** Options silently no-op. Stale data shown when user returns to app from background. No refetch after reconnect.
+
+**Fix:** Wire focusManager + onlineManager in the root layout. It's 15 lines. Do it once.
+
+### Keyboard handling via built-in KeyboardAvoidingView
+**The mistake:** Using RN's `KeyboardAvoidingView` with `behavior="padding"` on iOS / `"height"` on Android, hoping for the best.
+
+**Cost:** Different behavior per platform, janky animation, form inputs still covered on edge cases, hours spent tweaking offsets.
+
+**Fix:** Use `react-native-keyboard-controller` for identical behavior on both platforms. Since Expo SDK 54 it's included in Expo Go.
+
+### Wrapping the whole app in SafeAreaView
+**The mistake:** One `<SafeAreaView style={{flex:1}}>` at the root, assuming it handles all safe areas forever.
+
+**Cost:** Safe areas applied where headers/tabbars already handle them → double padding. Flickering from mixing SafeAreaView with `useSafeAreaInsets` downstream.
+
+**Fix:** `SafeAreaProvider` at the root (one time), then `useSafeAreaInsets()` per-screen, applying only the edges the screen actually needs.
+
+### Module-scope state in Reanimated worklets
+**The mistake:** Reading `sv.value` during render, destructuring shared values, mutating nested object fields.
+
+**Cost:** Silent reactivity loss, stale UI, "why isn't my animation running" debugging sessions.
+
+**Fix:** Shared values are ONLY accessed from worklets (`useAnimatedStyle`, `useDerivedValue`). Reassign the whole object, never mutate in place. For large arrays use `sv.modify()`.
+
+### Inline closures in FlashList `renderItem`
+**The mistake:** `renderItem={({item}) => <Row item={item} onPress={() => handle(item.id)} />}`
+
+**Cost:** New function every render → every row re-renders → dropped frames on scroll, stuttering on low-end devices.
+
+**Fix:** Memoize `renderItem` with `useCallback`, memoize row components with `React.memo`, stable `keyExtractor`.
+
+### Not setting `recyclingKey` on images in lists
+**The mistake:** `<Image source={{uri: item.url}} />` inside a FlashList row without `recyclingKey`.
+
+**Cost:** Recycled rows briefly show the previous item's image as the new one loads. Looks broken.
+
+**Fix:** `<Image recyclingKey={item.id} ... />` on any image in a recycled list row.
+
+### RN's built-in `<Image>` over expo-image
+**The mistake:** Shipping with `Image` from `react-native` because "it works."
+
+**Cost:** No disk cache, no blurhash placeholder, flicker on source change, higher memory use, no WebP/AVIF support.
+
+**Fix:** Always use `expo-image`. Zero reasons not to.
+
+### `AsyncStorage` for auth tokens
+**The mistake:** Storing JWTs / refresh tokens in `@react-native-async-storage/async-storage`.
+
+**Cost:** Tokens are readable by any app with filesystem access on rooted/jailbroken devices. Trivial to exfiltrate with a malicious config plugin.
+
+**Fix:** `expo-secure-store` for tokens. iOS Keychain / Android Keystore. Respect the 2KB size limit.
+
+### EXPO_PUBLIC_ for secrets
+**The mistake:** `EXPO_PUBLIC_API_KEY=sk_live_xxx` in `.env`.
+
+**Cost:** Statically inlined into the JS bundle. Trivially extractable with `apktool` or by reading the .ipa. Effectively public.
+
+**Fix:** Never put secrets in `EXPO_PUBLIC_*`. Call your backend which holds the secret. If you MUST ship a key (e.g. third-party public keys), at least understand it's world-readable.
+
+### `appVersion` runtime version policy
+**The mistake:** Using `runtimeVersion: { policy: 'appVersion' }` in app.config.ts.
+
+**Cost:** You can add a native dependency without bumping the app version, then ship an OTA update. The update reaches old binaries that don't have the native code → crash loop on launch.
+
+**Fix:** Use `fingerprint` policy. Deterministic, self-enforcing, prevents this entire class of bug.
+
+### Losing the Android keystore
+**The mistake:** Letting EAS generate an Android keystore, never downloading a backup.
+
+**Cost:** Lose access to your EAS account or the keystore gets corrupted → permanently cannot update your app on Play Store. Ever. Even with Apple-style recovery, Google Play's signing requires the same key forever (unless you enrolled in Play App Signing).
+
+**Fix:** `eas credentials` → download and back up the keystore to 1Password / secure storage immediately after first production build. Alternatively, enable Play App Signing so Google owns the upload key recovery.
+
+### Not testing on real devices
+**The mistake:** Shipping after testing only on iOS Simulator and Android Emulator.
+
+**Cost:** Simulators don't hit the same perf cliffs as real low-end devices. Memory constraints, CPU throttling, real haptics, real camera, real notifications — none work the same on sim.
+
+**Fix:** At minimum: one cheap Android (Moto G / Samsung A-series) and one older iPhone (SE / iPhone 11). Test every release candidate on both.
+
+### Screen component doing everything
+**The mistake:** One 800-line screen file with JSX + state + API calls + validation + navigation logic + side effects.
+
+**Cost:** Unmaintainable. Impossible to unit test. Every change risks breaking everything.
+
+**Fix:** Screens are orchestration only. Business logic in hooks (`useCreatePost`, `useAuth`). Pure functions for validation/transforms. Service functions for API calls.
+
+### Missing permissions descriptions in app.config.ts
+**The mistake:** Adding a config plugin that requires a permission (e.g., camera) but not setting the usage description.
+
+**Cost:** iOS build succeeds, app crashes on first permission request. Or: app store rejection at review.
+
+**Fix:** Every iOS permission needs an `ios.infoPlist.NS*UsageDescription`. Better: use the library's config plugin props (e.g., `expo-camera` plugin's `cameraPermission`) which set the string for you.
+
+### Not wiring `onlineManager` and shipping "offline support"
+**The mistake:** Adding `@tanstack/query-async-storage-persister` and calling it offline-first.
+
+**Cost:** Queries show stale data but all mutations still silently fail when offline. User thinks the app works, their changes never sync.
+
+**Fix:** Offline support is a design choice, not a library. Either (a) properly use mutation queueing with replay, test offline → online transitions, and handle conflicts, or (b) detect offline state and block writes with a clear UI.
+
+### Not handling Android 13+ notification permission
+**The mistake:** Calling `getExpoPushTokenAsync()` without first requesting `POST_NOTIFICATIONS` permission on Android 13+.
+
+**Cost:** Token fetch succeeds but notifications never appear. User never sees a prompt. Silent failure.
+
+**Fix:** Always call `requestPermissionsAsync()` before `getExpoPushTokenAsync()`. Always call `setNotificationChannelAsync()` on Android before either.
+
+### Debugging in Expo Go and shipping a dev build
+**The mistake:** Developing entirely in Expo Go, then discovering on first dev build that a library isn't bundled or behaves differently.
+
+**Cost:** Half the native modules you need aren't in Expo Go (push notifications on Android from SDK 53, custom native modules, any library not in the Expo Go bundle).
+
+**Fix:** Move to a dev build early. `eas build --profile development --platform ios` once at the start of the project, then run `expo start --dev-client`. Your dev loop is the same as Expo Go but with the full native module set.
+
+### Snapshot tests as the primary test suite
+**The mistake:** Autogenerating `toMatchSnapshot()` tests for every component.
+
+**Cost:** Tests break on every style change without catching real bugs. Devs stop reading diffs and blind-update snapshots. Coverage number looks great, signal is zero.
+
+**Fix:** Integration tests with `renderRouter` from `expo-router/testing-library`, asserting real user flows (render → interact → verify navigation/state). No snapshots.
+
+### Hand-writing navigation instead of using native stack
+**The mistake:** Building a custom JS-based stack for "more control," skipping `react-native-screens` native stack.
+
+**Cost:** Non-native transitions, worse performance, more JS work, platform-incorrect swipe-back, hacky iOS modal presentation.
+
+**Fix:** expo-router's default Stack is already native stack. Don't disable it. Use `presentation: 'modal' | 'formSheet'` for modals. Let the platform do the work.
+
