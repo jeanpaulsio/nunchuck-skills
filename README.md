@@ -4,27 +4,21 @@
 
 > "You know, like nunchuck skills, bow hunting skills, claude code skills. Girls only want boyfriends who have great skills."
 
-A practical engineering playbook for Claude Code. We spent like three hours on the shading the upper lip. It's probably the best playbook I've ever done.
+A practical code-review playbook for Claude Code. We spent like three hours on the shading the upper lip. It's probably the best playbook I've ever done.
 
 ## What's in the Tots
 
 ```
 nunchuck-skills/
 ├── commands/                        # Slash commands (triggers)
-│   ├── plan.md                      # /plan - product think + systems design
-│   ├── gimme-ur-tots.md             # /gimme-ur-tots - execute an approved plan end-to-end
 │   ├── python-review.md             # /python-review
 │   ├── react-review.md              # /react-review
 │   ├── react-native-review.md       # /react-native-review
 │   ├── rails-review.md              # /rails-review
 │   ├── data-review.md               # /data-review - schema + query review
-│   ├── security-review.md           # /security-review - deep security audit
-│   ├── scout.md                     # /scout - codebase assessment
-│   └── audit.md                     # /audit - ship confident cadences
+│   └── security-review.md           # /security-review - deep security audit
 │
-├── agents/                          # Agent definitions (the brains)
-│   ├── product-thinker.md           # Conversational requirements extraction
-│   ├── codebase-assessor.md         # Stack, schema, test, churn analysis
+├── agents/                          # Reviewer definitions (the brains)
 │   ├── python-reviewer.md           # Python/FastAPI/SQLAlchemy review
 │   ├── react-typescript-reviewer.md # React/TypeScript/Vike review
 │   ├── react-native-reviewer.md     # React Native / Expo review
@@ -33,8 +27,6 @@ nunchuck-skills/
 │   └── security-reviewer.md         # Deep security audit (app code + Claude config)
 │
 ├── skills/                          # Deep reference (the knowledge base)
-│   ├── workflow.md                  # The 5 phases
-│   ├── ship-confident.md            # Daily/weekly/monthly audit cadences
 │   ├── python-fastapi-patterns/
 │   │   └── SKILL.md                 # FastAPI + SQLAlchemy + Pydantic patterns
 │   ├── react-typescript-patterns/
@@ -62,111 +54,37 @@ nunchuck-skills/
 
 Three layers. Like a layered quesadilla but for code review.
 
-1. **Commands** trigger agents via slash commands (`/python-review`, `/plan`, `/scout`)
-2. **Agents** run review/analysis with severity-based filtering and structured output
-3. **Skills** provide the deep reference patterns agents draw from
+1. **Commands** trigger reviewers via slash commands (`/python-review`, `/data-review`, `/security-review`)
+2. **Reviewers** run the review with severity-based filtering and structured output
+3. **Skills** provide the deep reference patterns the reviewers draw from
 
 Plus **rules** (always-loaded guardrails) and **checklists** (pre-commit gates).
 
-## The 5 Phases
+Each reviewer ranks findings by severity (CRITICAL / HIGH / MEDIUM / LOW), gives a concrete failure scenario for each, and ends with a verdict — `APPROVE` when there's nothing serious, `WARNING` when there is. You decide what to fix. Nothing gets changed automatically.
 
-| Phase | How | When |
-|------|-----|------|
-| **Scout** | `/scout` | First time in a codebase or starting from scratch |
-| **Product Think** | `/plan` | Before writing any code for a new feature |
-| **Design** | `/plan` then `/data-review` | After product decisions, before implementation |
-| **Build** | `/gimme-ur-tots` | The actual coding — implement, review, audit, hand off |
-| **Audit** | `/audit daily\|weekly\|monthly` | Ongoing codebase health |
+## Example: Reviewing Uncle Rico's Time Machine Rental App
 
-Most vibe coders live in Build and wonder why everything breaks. It's like Rex Kwon Do without the training. You think you're tough? Forget about it.
+Here's how it looks in practice. Uncle Rico built an app where people rent his time machine by the hour, and now the booking service needs a review before it ships.
 
-## Install
-
-Hold on, I forgot to put in the crystals.
-
-```bash
-# Clone it somewhere on your machine (not inside your project)
-git clone https://github.com/jeanpaulsio/nunchuck-skills.git ~/nunchuck-skills
-
-# Option 1: Install to your current project
-cd ~/my-project
-~/nunchuck-skills/install.sh
-
-# Option 2: Install globally (applies to all projects)
-~/nunchuck-skills/install.sh --global
-```
-
-The install script copies files into `.claude/` (local) or `~/.claude/` (global). It doesn't add anything to your project's source code.
-
-## Example: Building Uncle Rico's Time Machine Rental App
-
-Here's how it looks in practice. Uncle Rico wants an app where people can rent his time machine by the hour.
-
-**1. `/plan` - think before you build**
-
-```
-> /plan
-  I want to build a time machine rental app for my uncle's business.
-  People book time slots, pay, use the machine, and return it.
-  Sometimes they break it.
-
-Claude: Walk me through what happens from the moment someone wants
-        to rent the time machine to when they return it.
-
-> Well they'd pick a time slot, pay, show up, use the machine, and
-  bring it back. Sometimes they break it.
-
-Claude: When they break it - does Rico charge them for repairs,
-        or is there a damage deposit upfront?
-
-> Damage deposit. And he wants to block people who've broken it before.
-
-Claude: Got it. Here's what I'm hearing:
-
-  Nouns: Customer, Booking, TimeSlot, DamageReport
-  Relationships:
-    - Customer has many Bookings
-    - Booking belongs to one TimeSlot
-    - Booking has zero or one DamageReport
-  Lifecycle:
-    - Booking: reserved -> paid -> active -> returned | damaged
-  V1 scope: booking + payments + damage tracking
-  Deferred: customer banning (v2)
-
-  Ready to design the schema and API contracts?
-
-> yes
-
-Claude designs the tables, foreign keys, status enums, and
-API endpoints. Presents it for your confirmation.
-```
-
-**2. `/data-review` - check the schema**
+**1. `/data-review` - check the schema first**
 
 ```
 > /data-review
 
 Claude: [HIGH] Missing index on bookings.customer_id
-        PostgreSQL does not auto-index foreign keys.
+        PostgreSQL does not auto-index foreign keys. Every
+        "show me this customer's bookings" query does a full
+        table scan.
 
         [MEDIUM] Consider a partial unique index on
         time_slots(start_time) WHERE available = true
 
-        Verdict: WARNING - fix the FK index before building.
+        Verdict: WARNING - fix the FK index before building on this.
 
 > fix it
 ```
 
-**3. Build the feature**
-
-```
-> alright, build the booking service
-
-Claude writes the migration, model, service layer, API route,
-and tests alongside the implementation.
-```
-
-**4. `/python-review` - before you commit**
+**2. `/python-review` - before you commit the service**
 
 ```
 > /python-review
@@ -191,88 +109,69 @@ Claude: No CRITICAL or HIGH issues. Verdict: APPROVE.
 > ok commit this and make a PR
 ```
 
-**5. `/audit` - after a few weeks of shipping**
+**3. `/security-review` - before you launch**
 
 ```
-> /audit weekly
+> /security-review
 
-Claude: Looked at last 10 PRs. Findings:
+Claude: [CRITICAL] Damage-deposit amount is trusted from the
+        client request body. A customer can set their own
+        deposit to $0.
 
-  This sprint:
-    - Extract date validation (appears in 3 files) - S, high pain
-  Next sprint:
-    - Split booking_service.py (crossed 400 lines) - M, medium pain
-  Track:
-    - test_booking_creation hasn't failed in 2 months - S, low pain
+        [MEDIUM] Booking IDs are sequential integers -- trivial
+        to enumerate other customers' bookings.
+
+        Verdict: WARNING - do not launch until the deposit
+        amount is server-computed.
 ```
 
-### The Commands
+Most vibe coders skip the review and wonder why everything breaks in production. It's like Rex Kwon Do without the training. You think you're tough? Forget about it.
+
+## The Commands
 
 ```
-/plan                  think before you build
-/gimme-ur-tots         execute an approved plan end-to-end
 /python-review         review Python/FastAPI code
 /react-review          review React/TypeScript code
 /react-native-review   review React Native / Expo code
 /rails-review          review Ruby on Rails code
 /data-review           review schema and queries
 /security-review       deep security audit before launch
-/scout                 scout a new or unfamiliar codebase
-/audit                 codebase health check (daily/weekly/monthly)
 ```
-
-## Gimme Ur Tots
-
-`/gimme-ur-tots` is the command you run once a plan is approved. It replaces the wall of instructions you'd otherwise type every time ("make commits, run the linter, add tests, flag assumptions..."). Everything below happens automatically, in order.
-
-**1. Implement step by step**
-
-Works through the implementation plan in order. Each step is completed fully before moving to the next — no stubs, no skipped error paths, no TODOs left as a way to move faster.
-
-**2. Tests alongside the code**
-
-Every new function, service, route, or component gets tests written with it, not in a backfill later. For bug fixes: the failing test is written first, then the fix.
-
-**3. Surface assumptions**
-
-Any decision that isn't explicitly defined in the plan and could affect product behavior gets called out inline as `[ASSUMPTION: ...]`. Small implementation details don't need flagging. Anything that touches what the feature does or how it behaves does.
-
-**4. Commit at real stopping points**
-
-Commits happen at meaningful units of working, tested functionality — not after every file, not as one giant commit at the end. A migration alone isn't a stopping point. A migration + model + service with passing tests is. Every commit only happens when lint, typecheck, format, and tests are all green.
-
-**5. Review pass**
-
-When implementation is complete, detects which stacks were touched and runs the appropriate reviewers:
-
-- Python/FastAPI changed → `/python-review`
-- React/TypeScript changed → `/react-review`
-- React Native / Expo changed → `/react-native-review`
-- Rails changed → `/rails-review`
-- Schema or queries changed → `/data-review`
-
-Addresses everything the reviewers surface. Re-runs until clean.
-
-**6. QA plan**
-
-Final output is a QA plan: what to manually verify, in what order, and what edge cases to hit.
 
 ## Stack Support
 
 All four stacks included. Whatever you want, gosh.
 
-- **Python / FastAPI / SQLAlchemy** - patterns, reviewer agent, checklist
-- **TypeScript / React / Vike** - patterns, reviewer agent, checklist
-- **React Native / Expo** - patterns, reviewer agent, checklist
-- **Ruby on Rails 8** - patterns, reviewer agent, checklist
+- **Python / FastAPI / SQLAlchemy** - patterns, reviewer, checklist
+- **TypeScript / React / Vike** - patterns, reviewer, checklist
+- **React Native / Expo** - patterns, reviewer, checklist
+- **Ruby on Rails 8** - patterns, reviewer, checklist
 - **PostgreSQL** - database patterns and reviewer (cross-stack)
+
+## Install
+
+Hold on, I forgot to put in the crystals.
+
+```bash
+# Clone it somewhere on your machine (not inside your project)
+git clone https://github.com/jeanpaulsio/nunchuck-skills.git ~/nunchuck-skills
+
+# Option 1: Install to your current project
+cd ~/my-project
+~/nunchuck-skills/install.sh
+
+# Option 2: Install globally (applies to all projects)
+~/nunchuck-skills/install.sh --global
+```
+
+The install script copies files into `.claude/` (local) or `~/.claude/` (global). It doesn't add anything to your project's source code.
 
 ## Philosophy
 
-- The person describes their world. The system translates it into engineering decisions.
+- A reviewer is a second pair of eyes, not a safety net for a sloppy first pass. When it catches the same category of issue every time, catch it during implementation instead.
 - Only include things Claude genuinely doesn't know or gets wrong without guidance.
 - Only extract patterns when they appear 3+ times.
-- Write tests alongside features, not in a separate backfill sprint.
+- Rank findings by severity and give a real failure scenario. A finding you can't turn into a repro isn't worth surfacing.
 - Your CLAUDE.md is more valuable than any generic skill.
 
 ## Credits

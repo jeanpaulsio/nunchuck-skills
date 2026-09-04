@@ -13,6 +13,13 @@ else
   echo "Installing nunchuck-skills locally to $TARGET/"
 fi
 
+# Clean previous install so files removed from the repo don't linger.
+# Safe: only the nunchuck-skills namespace is touched, never your own files.
+rm -rf "$TARGET/commands/nunchuck-skills" \
+       "$TARGET/agents/nunchuck-skills" \
+       "$TARGET/skills/nunchuck-skills" \
+       "$TARGET/rules/nunchuck-skills"
+
 # Create directories
 mkdir -p "$TARGET/commands/nunchuck-skills"
 mkdir -p "$TARGET/agents/nunchuck-skills"
@@ -52,4 +59,4 @@ ls -la "$TARGET/agents/nunchuck-skills/" 2>/dev/null && echo "" || true
 ls -la "$TARGET/skills/nunchuck-skills/" 2>/dev/null && echo "" || true
 ls -la "$TARGET/rules/nunchuck-skills/" 2>/dev/null && echo "" || true
 echo ""
-echo "Ready. Start with: \"/scout\" or \"/plan\""
+echo "Ready. Start with: \"/python-review\", \"/react-review\", or \"/data-review\""
