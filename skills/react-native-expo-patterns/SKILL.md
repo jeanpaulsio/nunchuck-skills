@@ -489,6 +489,83 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 
 Do **not** use React Native's `KeyboardAvoidingView`. It needs different `behavior` per platform, breaks on Android, and fights with navigation headers.
 
+### Context-driven sticky input
+
+`KeyboardAwareScrollView` moves the *content* to keep the focused field visible. Sometimes you want the opposite: the content stays put, and a single *chrome* element floats above the keyboard bound to whichever field is focused. Long-form text fields (notes, descriptions), inline editors, and multi-field forms where pushing the whole screen up would hide surrounding context all want this pattern.
+
+The architecture: a React context provider at the app root exposes `focus(config)` / `blur()` / `active`. Field components on any screen call `focus({ key, label, value, onChange, ... })` when tapped. A single shared `TextInput` mounted inside the provider's chrome reads the active config and floats above the keyboard. Switching fields keeps the same `TextInput` instance mounted -- just re-syncs local state -- so the keyboard never animates out between fields.
+
+```tsx
+// app/_layout.tsx
+<KeyboardStickyInputProvider>
+  <Stack />
+  <KeyboardStickyInput />
+</KeyboardStickyInputProvider>
+
+// Any field component, on any screen
+const { focus } = useKeyboardStickyInput()
+<Pressable onPress={() => focus({ key: 'notes', label: 'Notes', value, onChange })}>
+  <Text>{value || 'Add notes'}</Text>
+</Pressable>
+```
+
+Five non-obvious rules that make this work. Miss any one and the UX breaks in a different way:
+
+**1. Mount-on-active.** Return `null` from the sticky input component when `active` is nullish. An always-on `TextInput` pinned to the bottom creates a permanent hit target that eats background taps and forces you to manage focus/blur from two directions. Mount it only when a field is focused:
+
+```tsx
+export function KeyboardStickyInput() {
+  const { active, blur } = useKeyboardStickyInput()
+  if (!active) return null
+  return <ActiveStickyInput active={active} blur={blur} />
+}
+```
+
+**2. `keyboardShouldPersistTaps="handled"` on the parent `ScrollView`.** Without it, tapping a second field while the first is focused blurs the first field (dismissing the keyboard) *before* the tap registers on the second. With `"handled"` the tap passes through and you get an instant field switch with no keyboard animation between fields. This is the difference between a form that feels like a native app and one that feels like a web form pretending.
+
+**3. Re-sync local value via ref comparison on field switch.** Hold the `TextInput`'s value in local state for typing perf and passthrough to the field's `onChange`. When the user switches fields, the same `TextInput` instance keeps mounted but `active.key` changes -- you need to re-seed `localValue` from the new `active.value`. Use React's "derive state from props" pattern with a ref, not `useEffect` (which lags one render and causes a stale-value flash):
+
+```tsx
+const [localValue, setLocalValue] = useState(active.value)
+const prevKeyRef = useRef(active.key)
+if (prevKeyRef.current !== active.key) {
+  prevKeyRef.current = active.key
+  setLocalValue(active.value)
+}
+```
+
+**4. `requestAnimationFrame` focus on Fabric.** `autoFocus` and direct `ref.current?.focus()` inside `useEffect` are both flaky on the new architecture -- the native view isn't mounted when the effect runs, so the focus command lands on nothing. Focus inside a `requestAnimationFrame` and cancel in the cleanup:
+
+```tsx
+useEffect(() => {
+  const raf = requestAnimationFrame(() => inputRef.current?.focus())
+  return () => cancelAnimationFrame(raf)
+}, [])
+```
+
+**5. Fade + rise driven by `useAnimatedKeyboard`.** The sticky input mounts and paints at its resting position one frame before the keyboard animation starts, causing a visible flash (worst when the JS thread is busy on mount). Fix: start at `opacity: 0`, then drive both `opacity` and `translateY` off `keyboard.height.value` in a single `useAnimatedStyle` worklet. The chrome is invisible until the keyboard has actually started moving, then fades + rises ~12pt into place in lockstep with the first ~40px of keyboard motion:
+
+```tsx
+const keyboard = useAnimatedKeyboard()
+const bottomInset = useSafeAreaInsets().bottom
+
+const animatedStyle = useAnimatedStyle(() => {
+  const adjusted = Math.max(0, keyboard.height.value - bottomInset)
+  const progress = interpolate(
+    keyboard.height.value,
+    [0, 40],
+    [0, 1],
+    Extrapolation.CLAMP,
+  )
+  return {
+    opacity: progress,
+    transform: [{ translateY: -adjusted + (1 - progress) * 12 }],
+  }
+})
+```
+
+One worklet, no listeners, no timing race. The animation is tied to the keyboard itself, not a wall clock.
+
 ### Common Mistakes
 
 - Hardcoded `paddingTop: 44` instead of safe area insets → content under the notch on newer iPhones
@@ -1814,6 +1891,8 @@ The differences that bite you in production.
 - Status bar color via `expo-status-bar`, not React Native's `StatusBar`
 - `Linking.openURL` doesn't throw for invalid schemes -- check `canOpenURL` first
 - Safe area insets are non-zero even without a notch (status bar height)
+- `Switch` has a native drop shadow on the thumb that disappears the moment you pass `thumbColor`. Leave `thumbColor` unset on iOS; only override it on Android (see below).
+- Simulator software keyboard is disabled by default -- host Mac keyboard routes straight into the app. Toggle via `Cmd+K` or `I/O → Keyboard → Toggle Software Keyboard` when testing on-screen keyboard behaviour.
 
 ### Android
 
@@ -1822,6 +1901,10 @@ The differences that bite you in production.
 - `elevation` for shadows -- iOS `shadow*` props do nothing on Android
 - `Modal` has `onRequestClose` that must be wired for hardware back button to dismiss
 - `WebView` doesn't inherit cookies from the app's HTTP client without setup
+- Emulator `localhost` resolves to the emulator itself, not the host Mac. Use `10.0.2.2` (the emulator's alias for host loopback) for local dev servers. iOS Simulator shares the host network, so branch the default on `Platform.OS`: `Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000'`.
+- `Switch` reverts to Material blue on the thumb as soon as you pass `trackColor`. Fix: pass `thumbColor` explicitly on Android only (`thumbColor={Platform.OS === 'android' ? colors.surface : undefined}`). Leaving it `undefined` on iOS preserves the native drop shadow.
+- `@react-native-community/datetimepicker` silently ignores `display="spinner"` on Android and opens a Material clock dialog, so an iOS `DateTimePicker` and an Android `DateTimePicker` look like two different apps. If cross-platform brand consistency matters, drop the dep and build a custom bottom sheet with `@gorhom/bottom-sheet` + `@quidone/react-native-wheel-picker`.
+- AVD config defaults to `hw.keyboard=yes`, which routes the host Mac keyboard into the app and suppresses the software keyboard entirely. To test the on-screen keyboard, set `hw.keyboard=no` in `~/.android/avd/<name>.avd/config.ini` and cold-boot the emulator.
 
 ### Both
 
@@ -1829,6 +1912,11 @@ The differences that bite you in production.
 - `FlatList`/`FlashList` inside a `ScrollView` -- one of them breaks. Use `ListHeaderComponent` / `ListFooterComponent`.
 - `onPress` on nested `Pressable` bubbles to parent -- handle ordering carefully
 - `Image` without dimensions → renders zero-sized
+- Fabric / the new arch makes `autoFocus` and direct `focus()` inside `useEffect` both flaky -- the native view isn't mounted when the effect runs, so the focus command lands on nothing. Fix: `const raf = requestAnimationFrame(() => ref.current?.focus())` in the effect, and cancel it in the cleanup. Runs after the native view is attached.
+- `@gorhom/bottom-sheet` v5's content pan gesture steals vertical drags from scrollable children -- wheel pickers, inner `ScrollView`s, `FlatList`s inside a sheet all stop scrolling and instead drag the sheet up and down. Fix: `enableContentPanningGesture={false}` on the `BottomSheetModal`. The handle bar still dismisses; backdrop tap still closes.
+- Removing a module with native code (e.g., `npm uninstall @react-native-community/datetimepicker`) requires a dev client rebuild, not a Metro reload. Run `npx expo prebuild --clean && npx expo run:ios` (and `run:android`) -- otherwise the old native binary still references the removed module and the app crashes on launch or keeps the feature "working" from stale code.
+- `EXPO_PUBLIC_*` env vars are baked into the JS bundle at build time. After editing `.env`, restart with `npx expo start -c` (clears the Metro transform cache). A plain reload does not re-read the file.
+- Mount-on-focus chrome (sticky toolbars, inline editors that appear above the keyboard) has a paint-vs-keyboard-animation race: the wrap paints at its resting position one frame before the keyboard starts moving, causing a visible flash that's worst when the JS thread is busy. Fix: start the wrap at `opacity: 0`, then in a single `useAnimatedStyle` worklet derive both `opacity` and `translateY` from `useAnimatedKeyboard`'s `keyboard.height.value` via `interpolate([0, 40], [0, 1], Extrapolation.CLAMP)`. The wrap is invisible until the keyboard has actually started moving, then fades + rises ~12pt into place in lockstep with the first frames of the keyboard animation. One worklet, no listeners, no timing race.
 
 ### Common Mistakes
 
@@ -1874,3 +1962,14 @@ The differences that bite you in production.
 | Inline `if (isLoading)` on every screen | Extract a `ScreenState` wrapper |
 | Data fetching inside presentational components | Move to screens; presentational = props only |
 | Task defined inside a React component | Define at module scope so the OS can run it pre-mount |
+| Android emulator can't reach `localhost` on host | `Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000'` |
+| `@react-native-community/datetimepicker` for cross-platform time pickers | Custom `BottomSheetModal` + `@quidone/react-native-wheel-picker` |
+| Hand-rolled bottom sheet | `@gorhom/bottom-sheet` v5 (dynamic sizing default) |
+| Hand-rolled calendar | `react-native-calendars` |
+| Hand-rolled wheel picker | `@quidone/react-native-wheel-picker` |
+| Native `Alert.alert` for confirmations | Brand `BottomSheetModal` confirm with the app's chrome |
+| `Switch` turns Material blue once `trackColor` is set | `thumbColor={Platform.OS === 'android' ? ... : undefined}` (iOS loses drop shadow if set) |
+| `autoFocus` / `focus()` in `useEffect` on Fabric | `requestAnimationFrame(() => ref.current?.focus())` |
+| Mount-on-focus chrome flashes on keyboard open | Interpolate `opacity` + `translateY` off `useAnimatedKeyboard().height.value` in one worklet |
+| `@gorhom/bottom-sheet` steals drags from scrollable children | `enableContentPanningGesture={false}` |
+| Dropped a native module and Metro reload did nothing | Native deps need prebuild + run, not reload: `npx expo prebuild --clean && npx expo run:ios` |
