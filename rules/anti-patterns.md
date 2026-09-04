@@ -88,7 +88,7 @@ A recurring theme: building first, discovering constraints second.
 
 **The pattern:** Every revert in the commit history traces back to insufficient research before implementation.
 
-**The fix:** `/scout` exists for this reason. 10 minutes of platform research prevents an hour of debugging and a revert.
+**The fix:** 10 minutes of platform research prevents an hour of debugging and a revert.
 
 ## PaaS Deployment Traps
 
